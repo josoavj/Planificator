@@ -119,8 +119,12 @@ class Screen(MDApp):
         self.main_page_planning = 1
         self.main_page_historic = 1
 
+        # ✅ Contexte pour affichage en dialogue
+        self.current_traitement = None
+        self.current_client_name = None
+
         self.popup = ScreenManager(size_hint=( None, None))
-        popup(self.popup, init_only=True)  # ✅ Charger seulement les essentiels au démarrage
+        popup(self.popup)  # ✅ Charger tous les écrans modaux
 
         #Pour les dropdown
         self.menu = None
@@ -427,7 +431,7 @@ class Screen(MDApp):
                 Clock.schedule_once(lambda dt: self.loading_spinner('Sidebar', 'contrat', show=False), 0)
                 Clock.schedule_once(lambda dt: self.dismiss_popup(), 0)
                 Clock.schedule_once(lambda dt: self.fermer_ecran(), 0)
-                Clock.schedule_once(lambda dt: maj(), 0)
+                Clock.schedule_once(lambda dt, m=maj: m(), 0)
                 Clock.schedule_once(lambda dt: self.fenetre_contrat('Ajout du planning', 'ajout_planning'), 0)
                 Clock.schedule_once(lambda dt: self.show_dialog('Succès', 'Client et contrat créés avec succès'), 0)
 
@@ -764,7 +768,7 @@ class Screen(MDApp):
         def dlt():
             asyncio.run_coroutine_threadsafe(self.supprimer_client(), self.loop)
 
-        Clock.schedule_once(lambda dt: dlt(), 0.1)
+        Clock.schedule_once(lambda dt, d=dlt: d(), 0.1)
 
     def delete_account(self, admin_password):
         import verif_password as vp
@@ -1024,7 +1028,7 @@ class Screen(MDApp):
             md_bg_color='#56B5FB',
             title=titre,
             type='custom',
-            size_hint=(.8, .85) if ecran == 'ajout_info_client' else (.8,.4) if ecran == 'save_info_client' else (.8, .75) if ecran == 'new_contrat' else (.8, .65) ,
+            size_hint=(.8, .85) if ecran == 'ajout_info_client' else (.8,.4) if ecran == 'save_info_client' else (.8, .75) if ecran == 'new_contrat' else (.8, .65),
             content_cls= self.popup,
             auto_dismiss=False
         )
@@ -1144,7 +1148,7 @@ class Screen(MDApp):
             row_num = int(row.index / num_columns)
             column_num = row.index % num_columns  # 0=Date, 1=Montant, 2=Etat
             
-            print(f"🔹 Clic facture: row_num={row_num}, column={column_num} (colonne '{table.column_data[column_num][0]}')")
+            logger.info(f"🔹 Clic facture: row_num={row_num}, column={column_num}")
             
             # ✅ Calculer l'index global avec self.page_facture
             if not hasattr(self, 'page_facture'):
@@ -1165,52 +1169,25 @@ class Screen(MDApp):
             
             # ✅ Stocker les données avant ouverture du dialog
             self.date = self.reverse_date(row_value[0])
-            prix_initial = row_value[1]
+            prix_initial = str(row_value[1])
             
-            print(f"✅ Modification prix pour: {row_value[0]} (Prix: {prix_initial})")
+            logger.info(f"✅ Modification prix pour: {row_value[0]} (Prix: {prix_initial})")
             
-            # ✅ Afficher d'abord la fenêtre de confirmation
-            def ouvrir_confirmation(dt):
+            # ✅ Remplir les champs de confirmation AVANT d'ouvrir
+            def remplir_et_ouvrir(dt):
                 try:
-                    # ✅ Remplir les champs de confirmation
                     self.popup.get_screen('confirm_prix').ids.date_value.text = self.date
                     self.popup.get_screen('confirm_prix').ids.prix_actuel.text = prix_initial
-                    
-                    from kivymd.uix.dialog import MDDialog
-                    
-                    # ✅ Fermer seulement le popup précédent, pas l'écran
-                    # (l'appel à fermer_ecran() sera fait quand l'utilisateur annule)
-                    self.dismiss_popup()
-                    
-                    self.popup.current = 'confirm_prix'
-                    confirmation_dialog = MDDialog(
-                        md_bg_color='#56B5FB',
-                        type='custom',
-                        size_hint=(.5, .5),
-                        content_cls=self.popup,
-                        auto_dismiss=False
-                    )
-                    
-                    self.popup.height = '300dp'
-                    self.popup.width = '600dp'
-                    
-                    # ✅ Stocker le dialog
-                    self.dialog = confirmation_dialog
-                    self.dialog.bind(on_dismiss=self.dismiss_popup)
-                    self.dialog.open()
+                    # ✅ Utiliser le pattern fenetre_client pour ouvrir correctement le dialog
+                    self.fenetre_client('Modification du prix', 'confirm_prix')
                 except Exception as e:
-                    print(f'❌ Erreur ouverture dialog confirmation: {e}')
-                    import traceback
-                    traceback.print_exc()
-                    Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur ouverture confirmation: {str(e)}'), 0)
+                    logger.error(f'❌ Erreur remplissage confirmation: {e}', exc_info=True)
+                    Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur: {str(e)}'), 0)
             
-            Clock.schedule_once(ouvrir_confirmation, 0.2)
+            Clock.schedule_once(remplir_et_ouvrir, 0.1)
             
         except Exception as e:
-            print(f'❌ Erreur screen_modifier_prix: {e}')
-            import traceback
-            traceback.print_exc()
-            Clock.schedule_once(lambda dt: self.loading_spinner(self.popup, 'modif_prix', show=False), 0)
+            logger.error(f'❌ Erreur screen_modifier_prix: {e}', exc_info=True)
             Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur accès ligne: {str(e)}'), 0)
 
     def proceed_to_modify_price(self):
@@ -1220,48 +1197,25 @@ class Screen(MDApp):
             date_value = self.popup.get_screen('confirm_prix').ids.date_value.text
             prix_initial = self.popup.get_screen('confirm_prix').ids.prix_actuel.text
             
-            print(f"✅ Passage à la modification: {date_value} (Prix: {prix_initial})")
+            logger.info(f"✅ Passage à la modification: {date_value} (Prix: {prix_initial})")
             
-            # ✅ Ouvrir la fenêtre de modification
-            def ouvrir_modif(dt):
+            # ✅ Changer le screen du popup EXISTANT (ne pas créer un nouveau dialog)
+            def modifier_ecran(dt):
                 try:
                     self.popup.get_screen('modif_prix').ids.prix_init.text = prix_initial
                     self.popup.get_screen('modif_prix').ids.new_price.text = ''
-                    
-                    from kivymd.uix.dialog import MDDialog
-                    
-                    # ✅ Fermer les dialogs précédents avant d'en ouvrir un nouveau
-                    self.fermer_ecran()
-                    self.dismiss_popup()
-                    
+                    # ✅ Juste changer le screen - le dialog reste ouvert
                     self.popup.current = 'modif_prix'
-                    modification_dialog = MDDialog(
-                        md_bg_color='#56B5FB',
-                        type='custom',
-                        size_hint=(.5, .5),
-                        content_cls=self.popup,
-                        auto_dismiss=False
-                    )
-                    
-                    self.popup.height = '300dp'
-                    self.popup.width = '600dp'
-                    
-                    # ✅ Stocker le dialog
-                    self.dialog = modification_dialog
-                    self.dialog.bind(on_dismiss=self.dismiss_popup)
-                    self.dialog.open()
+                    logger.info(f"✅ Écran passé à modif_prix")
                 except Exception as e:
-                    print(f'❌ Erreur passage modification: {e}')
-                    import traceback
-                    traceback.print_exc()
-                    Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur ouverture modification: {str(e)}'), 0)
+                    logger.error(f'❌ Erreur changement screen: {e}', exc_info=True)
+                    Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur: {str(e)}'), 0)
             
-            Clock.schedule_once(ouvrir_modif, 0.2)
+            Clock.schedule_once(modifier_ecran, 0.1)
             
         except Exception as e:
-            print(f'❌ Erreur proceed_to_modify_price: {e}')
-            import traceback
-            traceback.print_exc()
+            logger.error(f'❌ Erreur proceed_to_modify_price: {e}', exc_info=True)
+            Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur: {str(e)}'), 0)
 
     def afficher_facture(self, titre ,ecran):
         from kivymd.uix.dialog import MDDialog
@@ -1301,7 +1255,7 @@ class Screen(MDApp):
         def recup():
             asyncio.run_coroutine_threadsafe(self.recuperer_donnee(place), self.loop)
 
-        Clock.schedule_once(lambda dt: recup(), 0.2)
+        Clock.schedule_once(lambda dt, r=recup: r(), 0.2)
 
         self.dialog.open()
 
@@ -1366,7 +1320,7 @@ class Screen(MDApp):
                 self.facture.row_data = row_data
                 self._display_table_with_delay(place, self.facture, delay=0.4)
             
-            Clock.schedule_once(lambda dt: set_and_display(), 0)
+            Clock.schedule_once(lambda dt, sad=set_and_display: sad(), 0)
 
     def fenetre_acceuil(self, titre, ecran, client, date,type_traitement, durée, debut_contrat, fin_prévu):
         from kivymd.uix.dialog import MDDialog
@@ -1401,38 +1355,23 @@ class Screen(MDApp):
     def fenetre_client(self, titre, ecran):
         from kivymd.uix.dialog import MDDialog
 
-        # ✅ CORRECTION: Supprimer l'ancien parent du popup si existant
-        if self.popup.parent:
-            self.popup.parent.remove_widget(self.popup)
-        
         self.popup.current = 'vide'
         self.popup.current = ecran
-        
-        # ✅ Dimensionner le popup correctement selon l'écran
-        if ecran == 'option_client':
-            size_hint = (0.85, 0.65)
-            height = '500dp'
-            width = '700dp'
-        else:
-            size_hint = (0.9, 0.8)
-            height = '600dp'
-            width = '900dp'
-        
-        self.popup.size_hint = (1, 1)  # Remplir tout le MDDialog
-        self.popup.height = height
-        self.popup.width = width
-        
         client = MDDialog(
             md_bg_color='#56B5FB',
-            title=titre if titre else 'Détails',
+            title=titre,
             type='custom',
-            size_hint=size_hint,
+            size_hint=(.8, .65) if ecran == 'option_client' else (.8, .85),
             content_cls=self.popup,
             auto_dismiss=False
         )
+        self.popup.height = '390dp' if ecran == 'option_client' else '550dp'
+        self.popup.width = '1000dp'
 
         self.dialog = client
         self.dialog.bind(on_dismiss=self.dismiss_popup)
+
+        self.dialog.open()
 
         self.dialog.open()
 
@@ -1440,8 +1379,7 @@ class Screen(MDApp):
         from kivymd.uix.dialog import MDDialog
 
         self.popup.current = 'vide'
-        # ✅ NE PAS appeler dismiss_popup() ici - ça supprime la popup du widget tree!
-        # dismiss_popup() sera appelée dans on_dismiss du dialog
+        self.dismiss_popup()
         if self.dialog != None:
             self.fermer_ecran()
         self.popup.current = ecran
@@ -1475,8 +1413,6 @@ class Screen(MDApp):
             auto_dismiss=False
         )
 
-        # ✅ S'assurer que le popup remplit tout le MDDialog
-        self.popup.size_hint = (1, 1)
         self.popup.height = height[ecran]
         self.popup.width = width[ecran]
 
@@ -1747,7 +1683,18 @@ class Screen(MDApp):
                 # ✅ CORRECTION: Refraîchir les tableaux AVANT de masquer le spinner
                 # Attendre que les modifications soient écrites en BD
                 await asyncio.sleep(0.5)
+                
+                # ✅ CORRECTION: Recharger TOUS les tableaux (Home + Planning)
                 await self.populate_tables()
+                
+                # ✅ Recharger aussi le tableau Planning si on est actuellement sur Planning
+                try:
+                    if self.root.get_screen('Sidebar').ids['gestion_ecran'].current == 'planning':
+                        planning_place = self.root.get_screen('Sidebar').ids['gestion_ecran'].get_screen('planning').ids.tableau_planning
+                        all_planning = await self.get_all_planning()
+                        self.tableau_planning(planning_place, all_planning)
+                except Exception as e:
+                    logger.warning(f"⚠️ Impossible de recharger planning directement: {e}")
                 
                 # ✅ CORRECTION: Masquer spinner et afficher succès
                 Clock.schedule_once(lambda dt: self.loading_spinner(self.popup, 'ecran_decalage', show=False), 0)
@@ -1847,8 +1794,9 @@ class Screen(MDApp):
         else:
             logger.info("  ➜ Screens popup déjà chargés, skip")
         
-        # ✅ ÉTAPE 5 - Afficher Home avec un petit délai pour laisser populate_tables se charger
-        Clock.schedule_once(lambda dt: self._show_home_after_login(), 0.2)
+        # ✅ ÉTAPE 5 - Afficher Home avec un délai PLUS LONG pour laisser populate_tables se charger
+        # Augmenté de 0.2s → 1.5s pour s'assurer que les tableaux sont prêts
+        Clock.schedule_once(lambda dt: self._show_home_after_login(), 1.5)
         self.reset()
 
     def _show_home_after_login(self):
@@ -1858,11 +1806,8 @@ class Screen(MDApp):
 
     def _load_additional_popup_screens(self):
         """Charger les écrans popup additionnels après le login"""
-        from gestion_ecran import popup
-        logger.info("🔹 _load_additional_popup_screens() appelée - chargement des screens popup...")
-        popup(self.popup, init_only=False)  # Charge TOUS les écrans
-        self._popup_full_loaded = True
-        logger.info("✅ Écrans popup additionnels chargés après login")
+        # ✅ Plus nécessaire - popup() charge déjà tous les écrans au démarrage
+        logger.info("✅ Écrans popup déjà chargés au démarrage")
 
     def _load_main_screens_async(self):
         """Charger Sidebar.kv + écrans de gestion après le login (main.kv déjà chargé au startup)"""
@@ -1903,7 +1848,7 @@ class Screen(MDApp):
             asyncio.run_coroutine_threadsafe(self.get_client(), self.loop)
 
         Clock.schedule_once(lambda dt: self.loading_spinner('Sidebar','contrat'), 0)
-        Clock.schedule_once(lambda dt: chargement_contrat(), 0.5)
+        Clock.schedule_once(lambda dt, cc=chargement_contrat: cc(), 0.5)
 
     def switch_to_client(self):
         self.root.get_screen('Sidebar').ids['gestion_ecran'].current = 'client'
@@ -1916,7 +1861,7 @@ class Screen(MDApp):
             asyncio.run_coroutine_threadsafe(self.all_clients(), self.loop)
 
         Clock.schedule_once(lambda dt: self.loading_spinner('Sidebar','client'), 0)
-        Clock.schedule_once(lambda dt: chargement_client(), 0.5)
+        Clock.schedule_once(lambda dt, cl=chargement_client: cl(), 0.5)
 
     def afficher_historique(self, type_trait):
         from kivy.uix.screenmanager import SlideTransition
@@ -1971,7 +1916,7 @@ class Screen(MDApp):
             asyncio.run_coroutine_threadsafe(self.liste_traitement_par_client(place, self.current_client[0]), self.loop)
 
         Clock.schedule_once(lambda dt: self.loading_spinner(self.popup, 'all_treatment'), 0)
-        Clock.schedule_once(lambda dt: maj_ecran(), 0.8)
+        Clock.schedule_once(lambda dt, me=maj_ecran: me(), 0.8)
 
     def voir_planning_par_traitement(self):
         if not self.current_client:
@@ -2285,9 +2230,9 @@ class Screen(MDApp):
             # ✅ Passer row_value[0] (nom_client) au lieu de client_id[row_num]
             asyncio.run_coroutine_threadsafe(self.liste_traitement_par_client(place, row_value[0]), self.loop)
 
-        # ✅ Loading spinner AVANT le chargement (délai 0), puis chargement après (délai 0.5s)
+        # ✅ Loading spinner AVANT le chargement (délai 0), puis chargement après (délai 0.75s)
         Clock.schedule_once(lambda dt: self.loading_spinner(self.popup,'all_treatment'), 0)
-        Clock.schedule_once(lambda dt: maj_ecran(), 0.5)
+        Clock.schedule_once(lambda dt, me=maj_ecran: me(), 0.75)
 
     async def liste_traitement_par_client(self, place, nom_client):
         try:
@@ -2523,7 +2468,7 @@ class Screen(MDApp):
             asyncio.run_coroutine_threadsafe(get_histo(), self.loop)
 
         Clock.schedule_once(lambda dt: self.loading_spinner('Sidebar', 'historique'), 0)
-        Clock.schedule_once(lambda dt: maj_ecran(), 0.5)
+        Clock.schedule_once(lambda dt, me=maj_ecran: me(), 0.75)
 
     async def current_client_info(self, nom_client, date):
         try:
@@ -2533,65 +2478,68 @@ class Screen(MDApp):
             print(e)
 
     def row_pressed_client(self, table, row):
-        # ✅ RESTAURÉ: Calcul simple de l'index global (ancien système)
+        # ✅ PATTERN ANCIEN: Calcul simple + délais courts (0.15s fenêtre, 1.5s infos)
         row_num = int(row.index / len(table.column_data))
         index_global = (self.main_page_client - 1) * 8 + row_num
         row_value = None
-        client_id = None
 
         if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
-            # ✅ Récupérer client_id du mapping
-            client_id = self.client_id_map.get(index_global)
         
         logger.info(f"🔹 row_pressed_client - page={self.main_page_client}, row_num={row_num}, index_global={index_global}")
-        logger.info(f"   client: {row_value}, client_id: {client_id}")
+        logger.info(f"   client: {row_value}")
         
-        if not client_id or not row_value:
-            logger.error("Erreur: client_id ou row_value introuvable")
+        if not row_value:
+            logger.error("Erreur: row_value introuvable")
             toast('Impossible de récupérer le client')
             return
         
-        # ✅ Charger les données asynchroniquement
-        async def load_and_display():
+        # ✅ PATTERN ANCIEN: DÉFINIR maj_ecran() AVANT de l'utiliser
+        def maj_ecran():
+            """Affiche la fenêtre et les infos - PATTERN ANCIEN"""
             try:
-                self.current_client = await self.database.get_current_client(client_id, self.reverse_date(row_value[3]))
-                # Une fois chargé, afficher la fenêtre
-                Clock.schedule_once(lambda dt: self._display_client_info(), 0)
+                if not self.current_client:
+                    logger.warning('current_client n\'est pas chargé')
+                    return
+                
+                if self.current_client[3] == 'Particulier':
+                    nom = self.current_client[1] + ' ' + self.current_client[2]
+                else:
+                    nom = self.current_client[1]
+
+                if self.current_client[6] == 'Indéterminée':
+                    fin = self.reverse_date(self.current_client[8])
+                else:
+                    fin = self.current_client[8]
+
+                self.popup.get_screen('option_client').ids.titre.text = f'A propos de {nom}'
+                self.popup.get_screen('option_client').ids.date_contrat.text = f'Contrat du : {self.reverse_date(self.current_client[4])}'
+                self.popup.get_screen('option_client').ids.debut_contrat.text = f'Début du contrat : {self.reverse_date(self.current_client[7])}'
+                self.popup.get_screen('option_client').ids.fin_contrat.text = f'Fin du contrat : {fin}'
+                self.popup.get_screen('option_client').ids.type_traitement.text = f'Type de traitement : {self.current_client[5]}'
+                self.popup.get_screen('option_client').ids.duree.text = f'Durée du contrat : {self.current_client[6]}'
+                logger.info(f"✅ Infos client affichées pour {nom}")
             except Exception as e:
-                logger.error(f"Erreur lors du chargement du client: {e}", exc_info=True)
+                logger.error(f'Erreur affichage info client: {e}', exc_info=True)
         
-        asyncio.run_coroutine_threadsafe(load_and_display(), self.loop)
+        # ✅ PATTERN ANCIEN: Utiliser nom_client et date_contrat (pas client_id!)
+        async def current_client_info_async():
+            try:
+                # row_value[0] = nom_client, row_value[3] = date_contrat (en format français DD-MM-YYYY)
+                # ➜ CORRECTION: Convertir de nouveau en format SQL YYYY-MM-DD pour la requête
+                date_sql = self.reverse_date(row_value[3])  # Convertit DD-MM-YYYY → YYYY-MM-DD
+                self.current_client = await self.database.get_current_client(row_value[0], date_sql)
+                logger.info(f"✅ current_client chargé: {self.current_client is not None}")
+                
+                # ✅ CORRECTION: Appeler maj_ecran() directement après chargement au lieu d'attendre 1.5s
+                Clock.schedule_once(lambda dt, mf=maj_ecran: mf(), 0)
+            except Exception as e:
+                logger.error(f"Erreur row_pressed_client: {e}", exc_info=True)
 
-    def _display_client_info(self):
-        """Affiche les informations du client une fois chargées"""
-        try:
-            if not self.current_client:
-                logger.warning('current_client n\'est pas chargé')
-                return
-            
-            # Afficher la fenêtre
-            self.fenetre_client('', 'option_client')
-            
-            # Mettre à jour les données
-            if self.current_client[3] == 'Particulier':
-                nom = self.current_client[1] + ' ' + self.current_client[2]
-            else:
-                nom = self.current_client[1]
+        asyncio.run_coroutine_threadsafe(current_client_info_async(), self.loop)
 
-            if self.current_client[6] == 'Indéterminée':
-                fin = self.reverse_date(self.current_client[8])
-            else:
-                fin = self.current_client[8]
-
-            self.popup.get_screen('option_client').ids.titre.text = f'A propos de {nom}'
-            self.popup.get_screen('option_client').ids.date_contrat.text = f'Contrat du : {self.reverse_date(self.current_client[4])}'
-            self.popup.get_screen('option_client').ids.debut_contrat.text = f'Début du contrat : {self.reverse_date(self.current_client[7])}'
-            self.popup.get_screen('option_client').ids.fin_contrat.text = f'Fin du contrat : {fin}'
-            self.popup.get_screen('option_client').ids.type_traitement.text = f'Type de traitement : {self.current_client[5]}'
-            self.popup.get_screen('option_client').ids.duree.text = f'Durée du contrat : {self.current_client[6]}'
-        except Exception as e:
-            logger.error(f'Erreur affichage info client: {e}', exc_info=True)
+        # ✅ PATTERN ANCIEN: Délai court pour ouvrir la fenêtre (0.15s)
+        Clock.schedule_once(lambda x: self.fenetre_client('', 'option_client'), 0.15)
 
     @mainthread
     def tableau_planning(self, place, result, dt=None):
@@ -2752,13 +2700,28 @@ class Screen(MDApp):
         row_value = None
         index_global = (self.main_page_planning - 1) * 8 + row_num
 
+        logger.info(f"🔹 row_pressed_planning - page={self.main_page_planning}, row_num={row_num}, index_global={index_global}")
+        logger.info(f"   len(row_data)={len(table.row_data)}, len(list_id)={len(list_id)}")
+
         if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
 
+        logger.info(f"   row_value={row_value}")
+
         self.fenetre_planning('', 'selection_planning')
-        logger.info(f"row_pressed_planning: {row_value}")
-        if row_value:
+        
+        if row_value and 0 <= index_global < len(list_id):
+            logger.info(f"   ✅ Appel get_and_update avec planning_id={list_id[index_global]}")
             Clock.schedule_once(lambda dt: self.get_and_update(row_value[1], row_value[0], list_id[index_global]), 0)
+        elif not row_value:
+            logger.warning(f"❌ row_value introuvable pour index_global={index_global}")
+            toast('Impossible de récupérer les données')
+        elif index_global >= len(list_id):
+            logger.error(f"❌ index_global={index_global} >= len(list_id)={len(list_id)}")
+            toast('Erreur: Planning non disponible')
+        else:
+            logger.error(f"❌ Erreur inconnue: index_global={index_global}")
+            toast('Erreur inconnue')
 
     def get_and_update(self, data1, data2, data3):
         asyncio.run_coroutine_threadsafe(self.planning_par_traitement(data1, data2, data3), self.loop)
@@ -2783,13 +2746,14 @@ class Screen(MDApp):
         def maj_ecran():
             asyncio.run_coroutine_threadsafe(details(), self.loop)
 
-        Clock.schedule_once(lambda ct: maj_ecran(), 0)
+        Clock.schedule_once(lambda ct, me=maj_ecran: me(), 0)
 
     def row_pressed_tableau_planning(self, traitement,  table, row):
         row_num = int(row.index / len(table.column_data))
         row_data = table.row_data[row_num]
 
-        index_global = (self.page - 1) * 5 + row_num
+        # ✅ CORRECTION: Utiliser self.page_select_planning au lieu de self.page
+        index_global = (self.page_select_planning - 1) * 5 + row_num
 
         if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
@@ -2804,14 +2768,6 @@ class Screen(MDApp):
             logger.info(f"planning_detail: {self.planning_detail}, type: {type(self.planning_detail)}")
 
         asyncio.run_coroutine_threadsafe(get(), self.loop)
-
-        if row.index % 3 == 0:
-            self.popup.get_screen('modif_date').ids.date_prevu.text = row_value[0]
-            self.popup.get_screen('modif_date').ids.date_decalage.text = ''
-            self.modifier_date()
-        else:
-            Clock.schedule_once(lambda dt: self.fenetre_planning('', 'selection_element_tableau'))
-            Clock.schedule_once(lambda dt: maj_ui())
 
         def maj_ui():
             try:
@@ -2833,6 +2789,17 @@ class Screen(MDApp):
 
             except Exception as e:
                 logger.error(f'affichage detail: {e}', exc_info=True)
+
+        # ✅ Ouvrir dialog selon le type de ligne
+        if row.index % 3 == 0:
+            # Cas spécial: modifier la date
+            self.popup.get_screen('modif_date').ids.date_prevu.text = row_value[0]
+            self.popup.get_screen('modif_date').ids.date_decalage.text = ''
+            self.modifier_date()
+        else:
+            # Cas normal: afficher dialog + remplir avec délai
+            Clock.schedule_once(lambda dt: self.fenetre_planning('', 'selection_element_tableau'), 0)
+            Clock.schedule_once(lambda dt, mu=maj_ui: mu(), 0.75)  # ✅ PATTERN ANCIEN: délai 0.75s!
 
     def afficher_ecran_remarque(self):
         self.fenetre_planning('', 'ajout_remarque')
@@ -2944,6 +2911,10 @@ class Screen(MDApp):
         place = self.root.get_screen('Sidebar').ids['gestion_ecran'].get_screen('historique').ids.tableau_historic
         place.clear_widgets()
 
+        # ✅ Sauvegarder le contexte pour l'affichage en dialog
+        self.current_traitement = categorie
+        self.current_client_name = None  # Sera défini au clic
+
         datas = []
         id_planning = []
         async def get_histo():
@@ -2965,7 +2936,7 @@ class Screen(MDApp):
             asyncio.run_coroutine_threadsafe(get_histo(), self.loop)
 
         Clock.schedule_once(lambda dt: self.loading_spinner('Sidebar', 'historique'), 0)
-        Clock.schedule_once(lambda dt: maj_ecran(), 0.5)
+        Clock.schedule_once(lambda dt, me=maj_ecran: me(), 0.75)
 
     def tableau_historic(self, place, data, planning_id):
         row_data = [(i[0], i[1], i[2], i[3] if i [3] != 'None' else 'pas de remarque') for i in data]
@@ -3026,15 +2997,22 @@ class Screen(MDApp):
             toast('Erreur: Cet historique n\'a pas de planning associé')
             return
 
+        # ✅ Sauvegarder le nom du client pour le titre du dialog
+        if row_value:
+            self.current_client_name = row_value[1]  # Colonne client
+
         place = self.popup.get_screen('histo_remarque').ids.tableau_rem_histo
         place.clear_widgets()
-        self.fenetre_histo('', 'histo_remarque')
+        
+        # ✅ Générer titre dynamique: "Historique de {traitement} pour {Client}"
+        titre = f"Historique de {self.current_traitement} pour {self.current_client_name}" if self.current_traitement and self.current_client_name else "Historique"
+        self.fenetre_histo(titre, 'histo_remarque')
 
         def get_data():
             asyncio.run_coroutine_threadsafe(self.historique_remarque(place, planning_id[index_global]), self.loop)
 
         Clock.schedule_once(lambda c: self.loading_spinner(self.popup, 'histo_remarque'), 0)
-        Clock.schedule_once(lambda c: get_data(), 0)
+        Clock.schedule_once(lambda c, gd=get_data: gd(), 0)
 
     async def historique_remarque(self, place, planning_id):
         from kivymd.uix.label import MDLabel
@@ -3106,7 +3084,7 @@ class Screen(MDApp):
                 self.remarque_historique.row_data = row_data
                 self._display_table_with_delay(place, self.remarque_historique, delay=0.4)
             
-            Clock.schedule_once(lambda dt: set_and_display(), 0.1)
+            Clock.schedule_once(lambda dt, sad=set_and_display: sad(), 0.1)
 
         except Exception as e:
             print(f'Erreur lors de la création du tableau des remarques historiques : {e}')
@@ -3385,7 +3363,7 @@ class Screen(MDApp):
                 return
             
             # Met à jour les données
-            Clock.schedule_once(lambda dt: update_data(), 0)
+            Clock.schedule_once(lambda dt, ud=update_data: ud(), 0)
             
         except Exception as e:
             logger.error(f'❌ ERREUR CRITIQUE _safe_home_tables: {e}', exc_info=True)
