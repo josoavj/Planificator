@@ -59,7 +59,9 @@ MDScreen:
             font_name: 'poppins'
             md_bg_color: '#FF3333'
             pos_hint: {'center_x': .3, 'center_y': .08}
-            on_press: app.root.ids.sm.current_screen.manager.dismiss_popup() if hasattr(app.root.ids.sm.current_screen, 'manager') else app.root.dismiss_popup()
+            on_press:
+                app.dismiss_popup()
+                app.fermer_ecran()
 
         MDRectangleFlatButton:
             text: 'Continuer'
@@ -67,4 +69,4 @@ MDScreen:
             font_name: 'poppins'
             md_bg_color: '#56B5FB'
             pos_hint: {'center_x': .7, 'center_y': .08}
-            on_press: app.root.proceed_to_modify_price()
+            on_press: app.proceed_to_modify_price()

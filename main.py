@@ -1137,7 +1137,8 @@ class Screen(MDApp):
                     
                     from kivymd.uix.dialog import MDDialog
                     
-                    self.fermer_ecran()
+                    # ✅ Fermer seulement le popup précédent, pas l'écran
+                    # (l'appel à fermer_ecran() sera fait quand l'utilisateur annule)
                     self.dismiss_popup()
                     
                     self.popup.current = 'confirm_prix'
@@ -1187,6 +1188,10 @@ class Screen(MDApp):
                     self.popup.get_screen('modif_prix').ids.new_price.text = ''
                     
                     from kivymd.uix.dialog import MDDialog
+                    
+                    # ✅ Fermer les dialogs précédents avant d'en ouvrir un nouveau
+                    self.fermer_ecran()
+                    self.dismiss_popup()
                     
                     self.popup.current = 'modif_prix'
                     modification_dialog = MDDialog(
