@@ -1565,7 +1565,21 @@ class Screen(MDApp):
             Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Veuillez remplir tous les champs'), 0)
             return
         # ✅ Validation reussie - continuer
+        # ✅ Mettre à jour la fenêtre de confirmation avec les infos client et contrat
         self.popup.get_screen('save_info_client').ids.titre.text = f'Enregistrement des informations sur {nom.capitalize()}'
+        
+        # ✅ Garder aussi les infos client en mémoire pour creer_contrat()
+        self.nom_client_temp = nom
+        self.prenom_client_temp = prenom
+        self.email_client_temp = email
+        self.telephone_client_temp = telephone
+        self.adresse_client_temp = adresse
+        self.date_ajout_temp = date_ajout
+        self.categorie_client_temp = categorie_client
+        self.axe_temp = axe
+        self.nif_temp = nif
+        self.stat_temp = stat
+        
         self.dismiss_popup()
         self.fermer_ecran()
         self.fenetre_contrat('', 'save_info_client')
@@ -1600,6 +1614,15 @@ class Screen(MDApp):
             self.popup.get_screen('save_info_client').ids.fin_contrat.text = 'Fin du contrat : Indéterminée'  if date_fin == '' else f'Fin du contrat : {date_fin}'
 
             self.fenetre_contrat('Ajout des informations sur le clients', 'ajout_info_client')
+
+    def retour_ajout_info_client(self):
+        """Retourner à la fenêtre ajout_info_client depuis save_info_client (confirmation)"""
+        # ✅ Fermer le dialog actuel avant d'en ouvrir un nouveau
+        if hasattr(self, 'dialog') and self.dialog:
+            self.dialog.dismiss()
+        
+        # ✅ Rouvrir ajout_info_client
+        self.fenetre_contrat('Ajout des informations sur le clients', 'ajout_info_client')
 
     async def all_clients(self):
         place = self.root.get_screen('Sidebar').ids['gestion_ecran'].get_screen('client').ids.tableau_client

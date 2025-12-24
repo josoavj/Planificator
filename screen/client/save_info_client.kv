@@ -50,9 +50,7 @@ MDScreen:
             text_color: 'black'
             pos_hint: {'center_x':.27, 'center_y': .28}
             on_release:
-                app.dismiss_popup()
-                app.fermer_ecran()
-                app.fenetre_contrat('Ajout des informations sur le clients', 'ajout_info_client')
+                app.retour_ajout_info_client()
 
         MDRectangleFlatButton:
             text: "Oui, j'accepte"
