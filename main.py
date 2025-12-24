@@ -107,6 +107,55 @@ class Screen(MDApp):
         self.paginator_facture = TablePaginator(rows_per_page=5)
         self.paginator_select_planning = TablePaginator(rows_per_page=5)
 
+        # ✅ LAZY LOADING: Tables créées à la demande au lieu du build()
+        self.table_en_cours = None
+        self.table_prevision = None
+        self.liste_contrat = None
+        self.all_treat = None
+        self.liste_planning = None
+        self.liste_client = None
+        self.historique = None
+        self.facture = None
+        self.account = None
+        self._tables_initialized = False
+
+        self.popup = ScreenManager(size_hint=( None, None))
+        popup(self.popup)
+
+        #Pour les dropdown
+        self.menu = None
+
+        self.dialogue = None
+
+        screen = ScreenManager()
+        # ✅ Ajouter le loading screen AVANT les autres écrans
+        screen.add_widget(Builder.load_file('screen/Loading.kv'))
+        screen.add_widget(Builder.load_file('screen/Login.kv'))
+        screen.add_widget(Builder.load_file('screen/Signup.kv'))
+        screen.add_widget(Builder.load_file('screen/main.kv'))
+        screen.add_widget(Builder.load_file('screen/Sidebar.kv'))
+        
+        # ✅ Afficher le loading screen en premier
+        screen.current = 'loading'
+        
+        # ✅ Planifier le chargement du Login après un délai (le temps que le loading s'affiche)
+        Clock.schedule_once(lambda dt: self._finish_loading(screen), 0.5)
+        
+        return screen
+
+    def _finish_loading(self, screen):
+        """Passer du loading screen à l'écran de login"""
+        screen.current = 'before login'
+        print("✅ Application chargée, passage à l'écran de connexion")
+
+    def _initialize_tables(self):
+        """Créer les tables à la demande (lazy loading) - appelé après le login"""
+        if self._tables_initialized:
+            return  # Éviter de créer les tables deux fois
+        
+        print("⏳ Initialisation des tableaux...")
+        
+        # ✅ Créer toutes les tables une seule fois
         self.table_en_cours = MDDataTable(
             use_pagination=True,
             rows_num=7,
@@ -134,20 +183,20 @@ class Screen(MDApp):
         )
 
         self.liste_contrat = MDDataTable(
-                pos_hint={'center_x': 0.5, "center_y": 0.53},
-                size_hint=(1, 1),
-                background_color_header='#56B5FB',
-                background_color='#56B5FB',
-                rows_num=8,
-                use_pagination= True,
-                elevation=0,
-                column_data=[
-                    ("Client concerné", dp(60)),
-                    ("Date du contrat", dp(35)),
-                    ("Type de traitement", dp(40)),
-                    ("Fréquence", dp(40)),
-                ],
-            )
+            pos_hint={'center_x': 0.5, "center_y": 0.53},
+            size_hint=(1, 1),
+            background_color_header='#56B5FB',
+            background_color='#56B5FB',
+            rows_num=8,
+            use_pagination= True,
+            elevation=0,
+            column_data=[
+                ("Client concerné", dp(60)),
+                ("Date du contrat", dp(35)),
+                ("Type de traitement", dp(40)),
+                ("Fréquence", dp(40)),
+            ],
+        )
 
         self.all_treat = MDDataTable(
             pos_hint={'center_x': 0.5, "center_y": 0.53},
@@ -163,6 +212,7 @@ class Screen(MDApp):
                 ("Fréquence", dp(40)),
             ],
         )
+
         self.liste_planning = MDDataTable(
             pos_hint={'center_x': .5, "center_y": .5},
             size_hint=(1, 1),
@@ -210,35 +260,9 @@ class Screen(MDApp):
                 ("Remarques", dp(40))
             ]
         )
-
-        self.popup = ScreenManager(size_hint=( None, None))
-        popup(self.popup)
-
-        #Pour les dropdown
-        self.menu = None
-
-        self.dialogue = None
-
-        screen = ScreenManager()
-        # ✅ Ajouter le loading screen AVANT les autres écrans
-        screen.add_widget(Builder.load_file('screen/Loading.kv'))
-        screen.add_widget(Builder.load_file('screen/Login.kv'))
-        screen.add_widget(Builder.load_file('screen/Signup.kv'))
-        screen.add_widget(Builder.load_file('screen/main.kv'))
-        screen.add_widget(Builder.load_file('screen/Sidebar.kv'))
         
-        # ✅ Afficher le loading screen en premier
-        screen.current = 'loading'
-        
-        # ✅ Planifier le chargement du Login après un délai (le temps que le loading s'affiche)
-        Clock.schedule_once(lambda dt: self._finish_loading(screen), 0.5)
-        
-        return screen
-
-    def _finish_loading(self, screen):
-        """Passer du loading screen à l'écran de login"""
-        screen.current = 'before login'
-        print("✅ Application chargée, passage à l'écran de connexion")
+        self._tables_initialized = True
+        print("✅ Tableaux initialisés avec succès")
 
     def login(self):
         """Gestion de l'action de connexion."""
@@ -1774,6 +1798,10 @@ class Screen(MDApp):
         self.root.get_screen('Sidebar').ids['gestion_ecran'].current =  'about'
 
     def switch_to_main(self):
+        # ✅ LAZY LOADING: Initialiser les tables à la demande
+        if not self._tables_initialized:
+            self._initialize_tables()
+        
         # Initialiser les écrans une seule fois après authentification
         if not self._screens_initialized:
             gestion_ecran(self.root)
