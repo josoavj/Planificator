@@ -1407,16 +1407,29 @@ class Screen(MDApp):
         
         self.popup.current = 'vide'
         self.popup.current = ecran
+        
+        # ✅ Dimensionner le popup correctement selon l'écran
+        if ecran == 'option_client':
+            size_hint = (0.85, 0.65)
+            height = '500dp'
+            width = '700dp'
+        else:
+            size_hint = (0.9, 0.8)
+            height = '600dp'
+            width = '900dp'
+        
+        self.popup.size_hint = (1, 1)  # Remplir tout le MDDialog
+        self.popup.height = height
+        self.popup.width = width
+        
         client = MDDialog(
             md_bg_color='#56B5FB',
-            title=titre,
+            title=titre if titre else 'Détails',
             type='custom',
-            size_hint=(.8, .65) if ecran == 'option_client' else (.8, .85),
+            size_hint=size_hint,
             content_cls=self.popup,
             auto_dismiss=False
         )
-        self.popup.height = '390dp' if ecran == 'option_client' else '550dp'
-        self.popup.width = '1000dp'
 
         self.dialog = client
         self.dialog.bind(on_dismiss=self.dismiss_popup)
@@ -1461,6 +1474,8 @@ class Screen(MDApp):
             auto_dismiss=False
         )
 
+        # ✅ S'assurer que le popup remplit tout le MDDialog
+        self.popup.size_hint = (1, 1)
         self.popup.height = height[ecran]
         self.popup.width = width[ecran]
 
@@ -2399,10 +2414,14 @@ class Screen(MDApp):
             self.liste_client.parent.remove_widget(self.liste_client)
 
         if client_data:
-            # ✅ Créer un tuple pour affichage (4 colonnes) ET un mapping client_id
+            # ✅ Créer un tuple pour affichage (4 colonnes) ET un mapping index_global -> client_id
             row_data = [(i[1], i[2], i[3], self.reverse_date(i[4])) for i in client_data]
-            # ✅ Stocker les IDs pour les récupérer dans row_pressed_client
-            self.client_id_map = {idx: i[0] for idx, i in enumerate(client_data)}
+            # ✅ Stocker les IDs avec index global (non index local)
+            # Index global = position dans la liste COMPLÈTE (pas juste la page courante)
+            self.client_id_map = {idx: client_data[idx][0] for idx in range(len(client_data))}
+            
+            print(f"📊 client_id_map créé: {len(self.client_id_map)} clients")
+            print(f"   Premiers IDs: {dict(list(self.client_id_map.items())[:3])}")
             
             # ✅ Initialiser le paginateur avec le nombre total d'éléments
             self.paginator_client.set_total_rows(len(row_data))
@@ -2443,8 +2462,10 @@ class Screen(MDApp):
 
         async def get_histo():
             try:
-                print(self.current_client)
-                result = await self.database.get_historic_par_client(self.current_client[1])
+                # ✅ Utiliser client_id (index 0) au lieu du nom (index 1)
+                client_id = self.current_client[0]
+                print(f"📜 Historique: cherche pour client_id={client_id}")
+                result = await self.database.get_historic_par_client(client_id)
                 data = []
                 id_planning = []
 
@@ -2452,13 +2473,17 @@ class Screen(MDApp):
                     for i in result:
                         data.append(i)
                         id_planning.append(i[4])
+                    print(f"✅ Historique: {len(data)} éléments trouvés")
                 else:
+                    print(f"⚠️ Historique: aucun élément trouvé pour client_id={client_id}")
                     data.append(('Aucun', 'Aucun', 'Aucun', 'Aucun'))
 
                 Clock.schedule_once(lambda dt: self.tableau_historic(place, data, id_planning), 0)
 
             except Exception as e:
-                print('par client',e)
+                print(f'❌ Erreur historique par client: {e}')
+                import traceback
+                traceback.print_exc()
 
         def maj_ecran():
             asyncio.run_coroutine_threadsafe(get_histo(), self.loop)
