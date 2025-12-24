@@ -131,9 +131,10 @@ class Screen(MDApp):
         screen = ScreenManager()
         # ✅ Ajouter le loading screen AVANT les autres écrans
         screen.add_widget(Builder.load_file('screen/Loading.kv'))
+        screen.add_widget(Builder.load_file('screen/main.kv'))
         screen.add_widget(Builder.load_file('screen/Login.kv'))
         screen.add_widget(Builder.load_file('screen/Signup.kv'))
-        # ⏳ main.kv et Sidebar.kv chargés APRÈS le login (async)
+        # ⏳ Sidebar.kv chargé APRÈS le login (async)
         
         # ✅ Afficher le loading screen en premier
         screen.current = 'loading'
@@ -145,9 +146,9 @@ class Screen(MDApp):
         return screen
 
     def _finish_loading(self, screen):
-        """Passer du loading screen à l'écran de login"""
+        """Passer du loading screen à l'écran d'accueil"""
         screen.current = 'before login'
-        print("✅ Application chargée, passage à l'écran de connexion")
+        print("✅ Application chargée, passage à l'écran d'accueil")
 
     def _initialize_tables(self):
         """Créer les tables à la demande (lazy loading) - appelé après le login"""
