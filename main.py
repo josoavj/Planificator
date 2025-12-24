@@ -133,8 +133,7 @@ class Screen(MDApp):
         screen.add_widget(Builder.load_file('screen/Loading.kv'))
         screen.add_widget(Builder.load_file('screen/Login.kv'))
         screen.add_widget(Builder.load_file('screen/Signup.kv'))
-        screen.add_widget(Builder.load_file('screen/main.kv'))
-        screen.add_widget(Builder.load_file('screen/Sidebar.kv'))
+        # ⏳ main.kv et Sidebar.kv chargés APRÈS le login (async)
         
         # ✅ Afficher le loading screen en premier
         screen.current = 'loading'
@@ -142,6 +141,7 @@ class Screen(MDApp):
         # ✅ Planifier le chargement du Login après un délai (le temps que le loading s'affiche)
         Clock.schedule_once(lambda dt: self._finish_loading(screen), 0.5)
         
+        self._main_screens_loaded = False
         return screen
 
     def _finish_loading(self, screen):
@@ -1813,6 +1813,10 @@ class Screen(MDApp):
         if not self._popup_full_loaded:
             self._load_additional_popup_screens()
         
+        # ✅ ÉTAPE 3 - Optimisation: Charger main.kv et Sidebar.kv asynchronement après login
+        if not self._main_screens_loaded:
+            self._load_main_screens_async()
+        
         self.root.current = 'Sidebar'
         self.root.get_screen('Sidebar').ids['gestion_ecran'].current =  'Home'
         self.reset()
@@ -1823,6 +1827,27 @@ class Screen(MDApp):
         popup(self.popup, init_only=False)  # Charge TOUS les écrans
         self._popup_full_loaded = True
         print("✅ Écrans popup additionnels chargés après login")
+
+    def _load_main_screens_async(self):
+        """Charger main.kv et Sidebar.kv de manière asynchrone après le login"""
+        if self._main_screens_loaded:
+            return  # Évite les doublons
+        
+        try:
+            from kivy.lang import Builder
+            
+            # Charger les screens asynchronously
+            main_screen = Builder.load_file('screen/main.kv')
+            sidebar_screen = Builder.load_file('screen/Sidebar.kv')
+            
+            # Les ajouter au ScreenManager
+            self.root.add_widget(main_screen)
+            self.root.add_widget(sidebar_screen)
+            
+            self._main_screens_loaded = True
+            print("✅ Screens main.kv et Sidebar.kv chargés asynchronement")
+        except Exception as e:
+            print(f"❌ Erreur lors du chargement asynchrone: {e}")
 
     def switch_to_contrat(self):
         self.root.get_screen('Sidebar').ids['gestion_ecran'].current = 'contrat'
