@@ -220,12 +220,25 @@ class Screen(MDApp):
         self.dialogue = None
 
         screen = ScreenManager()
-        screen.add_widget(Builder.load_file('screen/Sidebar.kv'))
-        screen.add_widget(Builder.load_file('screen/main.kv'))
-        screen.add_widget(Builder.load_file('screen/Signup.kv'))
+        # ✅ Ajouter le loading screen AVANT les autres écrans
+        screen.add_widget(Builder.load_file('screen/Loading.kv'))
         screen.add_widget(Builder.load_file('screen/Login.kv'))
-        screen.current = 'before login'
+        screen.add_widget(Builder.load_file('screen/Signup.kv'))
+        screen.add_widget(Builder.load_file('screen/main.kv'))
+        screen.add_widget(Builder.load_file('screen/Sidebar.kv'))
+        
+        # ✅ Afficher le loading screen en premier
+        screen.current = 'loading'
+        
+        # ✅ Planifier le chargement du Login après un délai (le temps que le loading s'affiche)
+        Clock.schedule_once(lambda dt: self._finish_loading(screen), 0.5)
+        
         return screen
+
+    def _finish_loading(self, screen):
+        """Passer du loading screen à l'écran de login"""
+        screen.current = 'before login'
+        print("✅ Application chargée, passage à l'écran de connexion")
 
     def login(self):
         """Gestion de l'action de connexion."""
