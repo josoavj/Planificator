@@ -1,0 +1,26 @@
+MDScreen:
+    name: 'loading'
+    md_bg_color: '#56B5FB'
+
+    MDFloatLayout:
+        MDLabel:
+            text: 'Planificator'
+            font_size: 48
+            font_name: 'poppins-bold'
+            halign: 'center'
+            pos_hint: {'center_x': .5, 'center_y': .6}
+            color: 1, 1, 1, 1
+
+        MDLabel:
+            text: 'Chargement...'
+            font_size: 18
+            font_name: 'poppins'
+            halign: 'center'
+            pos_hint: {'center_x': .5, 'center_y': .4}
+            color: 1, 1, 1, 1
+
+        MDSpinner:
+            size_hint: None, None
+            size: dp(50), dp(50)
+            pos_hint: {'center_x': .5, 'center_y': .25}
+            active: True

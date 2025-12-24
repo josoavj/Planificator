@@ -1,0 +1,72 @@
+MDScreen:
+    name: 'confirm_prix'
+    pos_hint: {'center_x': .5, 'center_y': .5}
+
+    MDFloatLayout:
+        pos_hint: {'center_x': .5, 'center_y': .5}
+
+        MDLabel:
+            id: titre
+            text: 'Confirmation modification prix'
+            font_size: 18
+            font_name: 'poppins'
+            halign: 'center'
+            pos_hint: {'center_x':.5, 'center_y': .95}
+
+        MDLabel:
+            text: 'Date du traitement'
+            font_name: "poppins"
+            font_size: 15
+            pos_hint: {"center_x": .5,'center_y':.75}
+
+        MDTextField:
+            id: date_value
+            text_color_normal: 'black'
+            mode: 'fill'
+            text_color_focus: 'black'
+            font_name:"poppins"
+            pos_hint:{"center_x":.5,"center_y":.6}
+            line_color_focus: '#56B5FB'
+            fill_color_normal: 'white'
+            line_color_normal: 'white'
+            size_hint: .6,None
+            radius:[10]
+            readonly: True
+
+        MDLabel:
+            text: 'Prix actuel'
+            font_name: "poppins"
+            font_size: 15
+            pos_hint: {"center_x": .5,'center_y':.45}
+
+        MDTextField:
+            id: prix_actuel
+            text_color_normal: 'black'
+            mode: 'fill'
+            text_color_focus: 'black'
+            font_name:"poppins"
+            pos_hint:{"center_x":.5,"center_y":.3}
+            line_color_focus: '#56B5FB'
+            fill_color_normal: 'white'
+            line_color_normal: 'white'
+            size_hint: .6,None
+            radius:[10]
+            readonly: True
+
+        MDRectangleFlatButton:
+            text: 'Annuler'
+            size_hint: .25, None
+            font_name: 'poppins'
+            md_bg_color: '#FF3333'
+            pos_hint: {'center_x': .3, 'center_y': .08}
+            on_press:
+                app.dismiss_popup()
+                app.fermer_ecran()
+
+        MDRectangleFlatButton:
+            text: 'Continuer'
+            size_hint: .25, None
+            font_name: 'poppins'
+            md_bg_color: '#56B5FB'
+            pos_hint: {'center_x': .7, 'center_y': .08}
+            on_press: app.proceed_to_modify_price()

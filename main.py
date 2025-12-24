@@ -62,6 +62,23 @@ class Screen(MDApp):
         asyncio.run_coroutine_threadsafe(self.database.connect(), self.loop)
         self._screens_initialized = False  # Flag pour éviter d'initialiser 2x
 
+    def _display_table_with_delay(self, place, table, delay=0.5):
+        """
+        Affiche un tableau avec un petit délai pour que le contenu se charge bien.
+        
+        Args:
+            place: Le widget conteneur (BoxLayout)
+            table: Le tableau à afficher (MDDataTable)
+            delay: Délai avant affichage en secondes (défaut: 0.5s)
+        """
+        def add_table():
+            if place and table:
+                place.clear_widgets()
+                place.add_widget(table)
+                print(f"✅ Tableau ajouté après {delay}s")
+        
+        Clock.schedule_once(lambda dt: add_table(), delay)
+
     def on_start(self):
         # Ne rien appeler ici - attendre la connexion réussie
         pass
@@ -80,6 +97,63 @@ class Screen(MDApp):
         self.card = None
         self.dialog = None
 
+        # ✅ LAZY LOADING: Tables créées à la demande au lieu du build()
+        self.table_en_cours = None
+        self.table_prevision = None
+        self.liste_contrat = None
+        self.all_treat = None
+        self.liste_planning = None
+        self.liste_client = None
+        self.historique = None
+        self.facture = None
+        self.account = None
+        self._tables_initialized = False
+        self._popup_full_loaded = False
+
+        # ✅ RESTAURÉ: Variables simples pour pagination (ancien système)
+        self.main_page_contract = 1
+        self.main_page_client = 1
+        self.main_page_planning = 1
+        self.main_page_historic = 1
+
+        self.popup = ScreenManager(size_hint=( None, None))
+        popup(self.popup, init_only=True)  # ✅ Charger seulement les essentiels au démarrage
+
+        #Pour les dropdown
+        self.menu = None
+
+        self.dialogue = None
+
+        screen = ScreenManager()
+        # ✅ Ajouter le loading screen AVANT les autres écrans
+        screen.add_widget(Builder.load_file('screen/Loading.kv'))
+        screen.add_widget(Builder.load_file('screen/main.kv'))
+        screen.add_widget(Builder.load_file('screen/Login.kv'))
+        screen.add_widget(Builder.load_file('screen/Signup.kv'))
+        # ⏳ Sidebar.kv chargé APRÈS le login (async)
+        
+        # ✅ Afficher le loading screen en premier
+        screen.current = 'loading'
+        
+        # ✅ Planifier le chargement du Login après un délai (le temps que le loading s'affiche)
+        Clock.schedule_once(lambda dt: self._finish_loading(screen), 0.5)
+        
+        self._main_screens_loaded = False
+        return screen
+
+    def _finish_loading(self, screen):
+        """Passer du loading screen à l'écran d'accueil"""
+        screen.current = 'before login'
+        print("✅ Application chargée, passage à l'écran d'accueil")
+
+    def _initialize_tables(self):
+        """Créer les tables à la demande (lazy loading) - appelé après le login"""
+        if self._tables_initialized:
+            return  # Éviter de créer les tables deux fois
+        
+        print("⏳ Initialisation des tableaux...")
+        
+        # ✅ Créer toutes les tables une seule fois
         self.table_en_cours = MDDataTable(
             use_pagination=True,
             rows_num=7,
@@ -107,20 +181,20 @@ class Screen(MDApp):
         )
 
         self.liste_contrat = MDDataTable(
-                pos_hint={'center_x': 0.5, "center_y": 0.53},
-                size_hint=(1, 1),
-                background_color_header='#56B5FB',
-                background_color='#56B5FB',
-                rows_num=8,
-                use_pagination= True,
-                elevation=0,
-                column_data=[
-                    ("Client concerné", dp(60)),
-                    ("Date du contrat", dp(35)),
-                    ("Type de traitement", dp(40)),
-                    ("Fréquence", dp(40)),
-                ],
-            )
+            pos_hint={'center_x': 0.5, "center_y": 0.53},
+            size_hint=(1, 1),
+            background_color_header='#56B5FB',
+            background_color='#56B5FB',
+            rows_num=8,
+            use_pagination= True,
+            elevation=0,
+            column_data=[
+                ("Client concerné", dp(60)),
+                ("Date du contrat", dp(35)),
+                ("Type de traitement", dp(40)),
+                ("Fréquence", dp(40)),
+            ],
+        )
 
         self.all_treat = MDDataTable(
             pos_hint={'center_x': 0.5, "center_y": 0.53},
@@ -136,6 +210,7 @@ class Screen(MDApp):
                 ("Fréquence", dp(40)),
             ],
         )
+
         self.liste_planning = MDDataTable(
             pos_hint={'center_x': .5, "center_y": .5},
             size_hint=(1, 1),
@@ -183,22 +258,9 @@ class Screen(MDApp):
                 ("Remarques", dp(40))
             ]
         )
-
-        self.popup = ScreenManager(size_hint=( None, None))
-        popup(self.popup)
-
-        #Pour les dropdown
-        self.menu = None
-
-        self.dialogue = None
-
-        screen = ScreenManager()
-        screen.add_widget(Builder.load_file('screen/Sidebar.kv'))
-        screen.add_widget(Builder.load_file('screen/main.kv'))
-        screen.add_widget(Builder.load_file('screen/Signup.kv'))
-        screen.add_widget(Builder.load_file('screen/Login.kv'))
-        screen.current = 'before login'
-        return screen
+        
+        self._tables_initialized = True
+        print("✅ Tableaux initialisés avec succès")
 
     def login(self):
         """Gestion de l'action de connexion."""
@@ -881,7 +943,7 @@ class Screen(MDApp):
                 buttons=[
                     MDFlatButton(
                         text="OK",
-                        on_release=lambda x: self.close_dialog()
+                        on_release=self.close_dialog
                     )
                 ],
             )
@@ -892,24 +954,28 @@ class Screen(MDApp):
                 buttons=[
                     MDFlatButton(
                         text='OUI',
-                        on_release= lambda x: self.deconnexion()
+                        on_release=self.deconnexion
                     ),
                     MDFlatButton(
                         text= 'NON',
-                        on_release= lambda x: self.close_dialog()
+                        on_release= self.close_dialog
                     )
                 ]
             )
         self.dialogue.open()
 
-    def deconnexion(self):
+    def deconnexion(self, *args):
         self.close_dialog()
         self.root.current = 'before login'
         self.admin = False
         self.compte = None
 
-    def close_dialog(self):
-        self.dialogue.dismiss()
+    def close_dialog(self, *args):
+        """Ferme le dialogue courant"""
+        if hasattr(self, 'dialogue') and self.dialogue:
+            self.dialogue.dismiss()
+            self.dialogue = None
+        print("✅ Dialogue fermé")
 
     def reverse_date(self, ex_date):
         if not ex_date:
@@ -1068,40 +1134,53 @@ class Screen(MDApp):
         asyncio.run_coroutine_threadsafe(changer(old_clean, new_clean), self.loop)
 
     def screen_modifier_prix(self, table, row):
-        # ✅ CORRECTION: Récupérer correctement les données de la ligne cliquée
+        # ✅ RESTAURÉ: Calcul simple de l'index global pour factures
         try:
-            # Récupérer le numéro de ligne
-            row_num = int(row.index / len(table.column_data))
+            # ✅ Déterminer quelle colonne a été cliquée
+            num_columns = len(table.column_data)
+            row_num = int(row.index / num_columns)
+            column_num = row.index % num_columns  # 0=Date, 1=Montant, 2=Etat
             
-            # ✅ CORRECTION: Vérifier que row_num est valide
-            if row_num < 0 or row_num >= len(table.row_data):
-                Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Ligne invalide'), 0)
+            print(f"🔹 Clic facture: row_num={row_num}, column={column_num} (colonne '{table.column_data[column_num][0]}')")
+            
+            # ✅ Calculer l'index global avec self.page_facture
+            if not hasattr(self, 'page_facture'):
+                self.page_facture = 1
+            index_global = (self.page_facture - 1) * 5 + row_num
+            
+            # ✅ Vérifier que l'index est valide
+            if not (0 <= index_global < len(table.row_data)):
+                toast('Ligne invalide')
                 return
                 
-            row_value = table.row_data[row_num]
+            row_value = table.row_data[index_global]
             
-            # ✅ CORRECTION: Vérifier que row_value est valide
+            # ✅ Vérifier que row_value est valide
             if not row_value or len(row_value) < 2:
-                Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Données de ligne invalides'), 0)
+                toast('Données de ligne invalides')
                 return
             
-            # ✅ CORRECTION: Stocker les données avant ouverture du dialog
+            # ✅ Stocker les données avant ouverture du dialog
             self.date = self.reverse_date(row_value[0])
             prix_initial = row_value[1]
             
-            # ✅ CORRECTION: Attendre un peu puis ouvrir le dialog
-            def ouvrir_dialog(dt):
+            print(f"✅ Modification prix pour: {row_value[0]} (Prix: {prix_initial})")
+            
+            # ✅ Afficher d'abord la fenêtre de confirmation
+            def ouvrir_confirmation(dt):
                 try:
-                    self.popup.get_screen('modif_prix').ids.prix_init.text = prix_initial
-                    self.popup.get_screen('modif_prix').ids.new_price.text = ''
+                    # ✅ Remplir les champs de confirmation
+                    self.popup.get_screen('confirm_prix').ids.date_value.text = self.date
+                    self.popup.get_screen('confirm_prix').ids.prix_actuel.text = prix_initial
                     
                     from kivymd.uix.dialog import MDDialog
                     
-                    self.fermer_ecran()
+                    # ✅ Fermer seulement le popup précédent, pas l'écran
+                    # (l'appel à fermer_ecran() sera fait quand l'utilisateur annule)
                     self.dismiss_popup()
                     
-                    self.popup.current = 'modif_prix'
-                    acceuil = MDDialog(
+                    self.popup.current = 'confirm_prix'
+                    confirmation_dialog = MDDialog(
                         md_bg_color='#56B5FB',
                         type='custom',
                         size_hint=(.5, .5),
@@ -1112,17 +1191,17 @@ class Screen(MDApp):
                     self.popup.height = '300dp'
                     self.popup.width = '600dp'
                     
-                    # ✅ CORRECTION: Stocker le dialog
-                    self.dialog = acceuil
+                    # ✅ Stocker le dialog
+                    self.dialog = confirmation_dialog
                     self.dialog.bind(on_dismiss=self.dismiss_popup)
                     self.dialog.open()
                 except Exception as e:
-                    print(f'❌ Erreur ouverture dialog prix: {e}')
+                    print(f'❌ Erreur ouverture dialog confirmation: {e}')
                     import traceback
                     traceback.print_exc()
-                    Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur ouverture dialog: {str(e)}'), 0)
+                    Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur ouverture confirmation: {str(e)}'), 0)
             
-            Clock.schedule_once(ouvrir_dialog, 0.2)
+            Clock.schedule_once(ouvrir_confirmation, 0.2)
             
         except Exception as e:
             print(f'❌ Erreur screen_modifier_prix: {e}')
@@ -1131,8 +1210,55 @@ class Screen(MDApp):
             Clock.schedule_once(lambda dt: self.loading_spinner(self.popup, 'modif_prix', show=False), 0)
             Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur accès ligne: {str(e)}'), 0)
 
-        self.dialog.open()
-        self.popup.get_screen('modif_prix').ids.new_price.text = ''
+    def proceed_to_modify_price(self):
+        """Passe de la fenêtre de confirmation à la fenêtre de modification de prix"""
+        try:
+            # ✅ Récupérer les données depuis la fenêtre de confirmation
+            date_value = self.popup.get_screen('confirm_prix').ids.date_value.text
+            prix_initial = self.popup.get_screen('confirm_prix').ids.prix_actuel.text
+            
+            print(f"✅ Passage à la modification: {date_value} (Prix: {prix_initial})")
+            
+            # ✅ Ouvrir la fenêtre de modification
+            def ouvrir_modif(dt):
+                try:
+                    self.popup.get_screen('modif_prix').ids.prix_init.text = prix_initial
+                    self.popup.get_screen('modif_prix').ids.new_price.text = ''
+                    
+                    from kivymd.uix.dialog import MDDialog
+                    
+                    # ✅ Fermer les dialogs précédents avant d'en ouvrir un nouveau
+                    self.fermer_ecran()
+                    self.dismiss_popup()
+                    
+                    self.popup.current = 'modif_prix'
+                    modification_dialog = MDDialog(
+                        md_bg_color='#56B5FB',
+                        type='custom',
+                        size_hint=(.5, .5),
+                        content_cls=self.popup,
+                        auto_dismiss=False
+                    )
+                    
+                    self.popup.height = '300dp'
+                    self.popup.width = '600dp'
+                    
+                    # ✅ Stocker le dialog
+                    self.dialog = modification_dialog
+                    self.dialog.bind(on_dismiss=self.dismiss_popup)
+                    self.dialog.open()
+                except Exception as e:
+                    print(f'❌ Erreur passage modification: {e}')
+                    import traceback
+                    traceback.print_exc()
+                    Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur ouverture modification: {str(e)}'), 0)
+            
+            Clock.schedule_once(ouvrir_modif, 0.2)
+            
+        except Exception as e:
+            print(f'❌ Erreur proceed_to_modify_price: {e}')
+            import traceback
+            traceback.print_exc()
 
     def afficher_facture(self, titre ,ecran):
         from kivymd.uix.dialog import MDDialog
@@ -1209,21 +1335,20 @@ class Screen(MDApp):
                     ("Etat", dp(30)),
                 ]
             )
+
             pagination = self.facture.pagination
 
             btn_prev = pagination.ids.button_back
             btn_next = pagination.ids.button_forward
 
-            self.page = 1
-
             def on_press_page(direction, instance=None):
-                print(direction)
+                print(f"📄 Pagination facture: {direction} | page avant: {self.page_facture}")
                 max_page = (len(row_data) - 1) // 5 + 1
-                if direction == 'moins' and self.page > 1:
-                    self.page -= 1
-                elif direction == 'plus' and self.page < max_page:
-                    self.page += 1
-                print(self.page)
+                if direction == 'moins' and self.page_facture > 1:
+                    self.page_facture -= 1
+                elif direction == 'plus' and self.page_facture < max_page:
+                    self.page_facture += 1
+                print(f"   page après: {self.page_facture}")
 
             btn_prev.bind(on_press=partial(on_press_page, 'moins'))
             btn_next.bind(on_press=partial(on_press_page, 'plus'))
@@ -1232,8 +1357,13 @@ class Screen(MDApp):
                 self.facture.row_data = row_data
 
             self.facture.bind(on_row_press=lambda instance, row: self.screen_modifier_prix(instance, row))
-            Clock.schedule_once(lambda dt: _(), 0)
-            place.add_widget(self.facture)
+            
+            # ✅ Afficher avec délai pour que les données se chargent bien
+            def set_and_display():
+                self.facture.row_data = row_data
+                self._display_table_with_delay(place, self.facture, delay=0.4)
+            
+            Clock.schedule_once(lambda dt: set_and_display(), 0)
 
     def fenetre_acceuil(self, titre, ecran, client, date,type_traitement, durée, debut_contrat, fin_prévu):
         from kivymd.uix.dialog import MDDialog
@@ -1274,16 +1404,29 @@ class Screen(MDApp):
         
         self.popup.current = 'vide'
         self.popup.current = ecran
+        
+        # ✅ Dimensionner le popup correctement selon l'écran
+        if ecran == 'option_client':
+            size_hint = (0.85, 0.65)
+            height = '500dp'
+            width = '700dp'
+        else:
+            size_hint = (0.9, 0.8)
+            height = '600dp'
+            width = '900dp'
+        
+        self.popup.size_hint = (1, 1)  # Remplir tout le MDDialog
+        self.popup.height = height
+        self.popup.width = width
+        
         client = MDDialog(
             md_bg_color='#56B5FB',
-            title=titre,
+            title=titre if titre else 'Détails',
             type='custom',
-            size_hint=(.8, .65) if ecran == 'option_client' else (.8, .85),
+            size_hint=size_hint,
             content_cls=self.popup,
             auto_dismiss=False
         )
-        self.popup.height = '390dp' if ecran == 'option_client' else '550dp'
-        self.popup.width = '1000dp'
 
         self.dialog = client
         self.dialog.bind(on_dismiss=self.dismiss_popup)
@@ -1328,6 +1471,8 @@ class Screen(MDApp):
             auto_dismiss=False
         )
 
+        # ✅ S'assurer que le popup remplit tout le MDDialog
+        self.popup.size_hint = (1, 1)
         self.popup.height = height[ecran]
         self.popup.width = width[ecran]
 
@@ -1471,7 +1616,21 @@ class Screen(MDApp):
             Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Veuillez remplir tous les champs'), 0)
             return
         # ✅ Validation reussie - continuer
+        # ✅ Mettre à jour la fenêtre de confirmation avec les infos client et contrat
         self.popup.get_screen('save_info_client').ids.titre.text = f'Enregistrement des informations sur {nom.capitalize()}'
+        
+        # ✅ Garder aussi les infos client en mémoire pour creer_contrat()
+        self.nom_client_temp = nom
+        self.prenom_client_temp = prenom
+        self.email_client_temp = email
+        self.telephone_client_temp = telephone
+        self.adresse_client_temp = adresse
+        self.date_ajout_temp = date_ajout
+        self.categorie_client_temp = categorie_client
+        self.axe_temp = axe
+        self.nif_temp = nif
+        self.stat_temp = stat
+        
         self.dismiss_popup()
         self.fermer_ecran()
         self.fenetre_contrat('', 'save_info_client')
@@ -1506,6 +1665,15 @@ class Screen(MDApp):
             self.popup.get_screen('save_info_client').ids.fin_contrat.text = 'Fin du contrat : Indéterminée'  if date_fin == '' else f'Fin du contrat : {date_fin}'
 
             self.fenetre_contrat('Ajout des informations sur le clients', 'ajout_info_client')
+
+    def retour_ajout_info_client(self):
+        """Retourner à la fenêtre ajout_info_client depuis save_info_client (confirmation)"""
+        # ✅ Fermer le dialog actuel avant d'en ouvrir un nouveau
+        if hasattr(self, 'dialog') and self.dialog:
+            self.dialog.dismiss()
+        
+        # ✅ Rouvrir ajout_info_client
+        self.fenetre_contrat('Ajout des informations sur le clients', 'ajout_info_client')
 
     async def all_clients(self):
         place = self.root.get_screen('Sidebar').ids['gestion_ecran'].get_screen('client').ids.tableau_client
@@ -1644,15 +1812,61 @@ class Screen(MDApp):
         self.root.get_screen('Sidebar').ids['gestion_ecran'].current =  'about'
 
     def switch_to_main(self):
-        # Initialiser les écrans une seule fois après authentification
+        # ✅ ÉTAPE 1 - Charger Sidebar.kv + gestion_ecran si pas encore chargé (essentiel)
+        if not self._main_screens_loaded:
+            self._load_main_screens_async()
+        
+        # ✅ ÉTAPE 2 - Lazy load tables à la demande
+        if not self._tables_initialized:
+            self._initialize_tables()
+        
+        # ✅ ÉTAPE 3 - Charger populate_tables une seule fois après authentification
         if not self._screens_initialized:
-            gestion_ecran(self.root)
             self._screens_initialized = True
             asyncio.run_coroutine_threadsafe(self.populate_tables(), self.loop)
+        
+        # ✅ ÉTAPE 4 - Charger les écrans popup additionnels après login
+        if not self._popup_full_loaded:
+            self._load_additional_popup_screens()
         
         self.root.current = 'Sidebar'
         self.root.get_screen('Sidebar').ids['gestion_ecran'].current =  'Home'
         self.reset()
+
+    def _load_additional_popup_screens(self):
+        """Charger les écrans popup additionnels après le login"""
+        from gestion_ecran import popup
+        popup(self.popup, init_only=False)  # Charge TOUS les écrans
+        self._popup_full_loaded = True
+        print("✅ Écrans popup additionnels chargés après login")
+
+    def _load_main_screens_async(self):
+        """Charger Sidebar.kv + écrans de gestion après le login (main.kv déjà chargé au startup)"""
+        if self._main_screens_loaded:
+            return  # Évite les doublons
+        
+        try:
+            from kivy.lang import Builder
+            
+            # Charger Sidebar.kv (main.kv est déjà chargé au startup)
+            sidebar_screen = Builder.load_file('screen/Sidebar.kv')
+            
+            # L'ajouter au ScreenManager
+            self.root.add_widget(sidebar_screen)
+            
+            # ✅ OPTIMISATION: Charger immédiatement les écrans gestion_ecran après Sidebar
+            # Ça rend le switch plus rapide et évite les gels au premier clique
+            try:
+                gestion_ecran(self.root)
+                self._screens_initialized = True
+                print("✅ Écrans gestion_ecran chargés rapidement après Sidebar")
+            except Exception as e:
+                print(f"⚠️ Erreur chargement gestion_ecran: {e}")
+            
+            self._main_screens_loaded = True
+            print("✅ Sidebar.kv + écrans gestion_ecran chargés après login")
+        except Exception as e:
+            print(f"❌ Erreur lors du chargement asynchrone: {e}")
 
     def switch_to_contrat(self):
         self.root.get_screen('Sidebar').ids['gestion_ecran'].current = 'contrat'
@@ -2000,31 +2214,31 @@ class Screen(MDApp):
             btn_prev = pagination.ids.button_back
             btn_next = pagination.ids.button_forward
 
-            self.main_page = 1
-
             def on_press_page(direction, instance=None):
-                print(direction)
-                max_page = (len(row_data) - 1) // 5 + 1
-                if direction == 'moins' and self.main_page > 1:
-                    self.main_page -= 1
-                elif direction == 'plus' and self.main_page < max_page:
-                    self.main_page += 1
-                print(self.main_page)
+                print(f"📄 Pagination contrat: {direction} | page avant: {self.main_page_contract}")
+                max_page = (len(row_data) - 1) // 8 + 1
+                if direction == 'moins' and self.main_page_contract > 1:
+                    self.main_page_contract -= 1
+                elif direction == 'plus' and self.main_page_contract < max_page:
+                    self.main_page_contract += 1
+                print(f"   page après: {self.main_page_contract}")
 
             btn_prev.bind(on_press=partial(on_press_page, 'moins'))
             btn_next.bind(on_press=partial(on_press_page, 'plus'))
 
             self.liste_contrat.row_data = row_data
             self.liste_contrat.bind(on_row_press=partial(self.get_traitement_par_client, client_id))
-            if contract_data:
-                place.add_widget(self.liste_contrat)
+            
+            # ✅ Afficher avec délai
+            self._display_table_with_delay(place, self.liste_contrat, delay=0.4)
 
         except Exception as e:
             print(f"Error creating contract table: {e}")
 
     def get_traitement_par_client(self, client_id, table, row):
+        # ✅ RESTAURÉ: Calcul simple de l'index global
         row_num = int(row.index / len(table.column_data))
-        row_data = table.row_data[row_num]
+        index_global = (self.main_page_contract - 1) * 8 + row_num
 
         if self.popup.parent:
             self.popup.parent.remove_widget(self.popup)
@@ -2032,7 +2246,6 @@ class Screen(MDApp):
 
         place = self.popup.get_screen('all_treatment').ids.tableau_treat
         place.clear_widgets()
-        index_global = (self.main_page - 1) * 8 + row_num
         row_value = None
 
         if 0 <= index_global < len(table.row_data):
@@ -2045,10 +2258,10 @@ class Screen(MDApp):
         self.client_name = row_value[0]
 
         def maj_ecran():
-            # ✅ CORRECTION: Passer row_value[0] (nom_client) au lieu de client_id[row_num]
+            # ✅ Passer row_value[0] (nom_client) au lieu de client_id[row_num]
             asyncio.run_coroutine_threadsafe(self.liste_traitement_par_client(place, row_value[0]), self.loop)
 
-        # ✅ CORRECTION: Loading spinner AVANT le chargement (délai 0), puis chargement après (délai 0.5s)
+        # ✅ Loading spinner AVANT le chargement (délai 0), puis chargement après (délai 0.5s)
         Clock.schedule_once(lambda dt: self.loading_spinner(self.popup,'all_treatment'), 0)
         Clock.schedule_once(lambda dt: maj_ecran(), 0.5)
 
@@ -2091,7 +2304,6 @@ class Screen(MDApp):
         for item in data:
             try:
                 if len(item) >= 8:  # Vérifier qu'on a assez d'éléments
-                    nom_client = item[0] if item[0] is not None else "N/A"
                     date = self.reverse_date(item[1]) if item[1] is not None else "N/A"
                     traitement = item[2] if item[2] is not None else "N/A"
                     redondance = item[7] if item[7] is not None else "N/A"
@@ -2102,53 +2314,63 @@ class Screen(MDApp):
                     else:
                         display_freq = f'{redondance} mois'
                     
-                    print(f"📋 Traitement {nom_client}: {date} - {traitement} ({display_freq})")
+                    print(f"📋 Traitement: {date} - {traitement} ({display_freq})")
                     row_data.append((date, traitement, display_freq))
                 else:
                     print(f"⚠️ Item insuffisant: {item}")
             except Exception as e:
                 print(f"❌ Erreur traitement: {e}")
 
-            try:
-                self.all_treat.row_data = row_data
+        # ✅ Configurez la table APRÈS la boucle
+        try:
+            self.all_treat.row_data = row_data
 
-                pagination = self.all_treat.pagination
+            pagination = self.all_treat.pagination
 
-                btn_prev = pagination.ids.button_back
-                btn_next = pagination.ids.button_forward
+            btn_prev = pagination.ids.button_back
+            btn_next = pagination.ids.button_forward
 
-                self.page = 1
+            self.page = 1
 
-                def on_press_page(direction, instance=None):
-                    max_page = (len(row_data) - 1) // 5 + 1
-                    if direction == 'moins' and self.page > 1:
-                        self.page -= 1
-                    elif direction == 'plus' and self.page < max_page:
-                        self.page += 1
+            def on_press_page(direction, instance=None):
+                print(f"📄 Pagination traitement: {direction} | page avant: {self.page}")
+                max_page = (len(row_data) - 1) // 4 + 1
+                if direction == 'moins' and self.page > 1:
+                    self.page -= 1
+                elif direction == 'plus' and self.page < max_page:
+                    self.page += 1
+                print(f"   page après: {self.page}")
 
-                btn_prev.bind(on_press=partial(on_press_page, 'moins'))
-                btn_next.bind(on_press=partial(on_press_page, 'plus'))
+            btn_prev.bind(on_press=partial(on_press_page, 'moins'))
+            btn_next.bind(on_press=partial(on_press_page, 'plus'))
 
-                self.all_treat.bind(on_row_press=self.row_pressed_contrat)
+            self.all_treat.bind(on_row_press=self.row_pressed_contrat)
 
-                if self.all_treat.parent:
-                    self.all_treat.parent.remove_widget(self.all_treat)
-                place.add_widget(self.all_treat)
+            # ✅ Afficher avec délai
+            self._display_table_with_delay(place, self.all_treat, delay=0.4)
 
-            except Exception as e:
-                print(f'Error creating traitement table: {e}')
+        except Exception as e:
+            print(f'Error creating traitement table: {e}')
+
 
     def row_pressed_contrat(self, table, row):
+        # ✅ RESTAURÉ: Calcul simple de l'index global
         row_num = int(row.index / len(table.column_data))
-        # ✅ CORRECTION: Calculer index_global en tenant compte de la pagination (4 par page)
         index_global = (self.page - 1) * 4 + row_num
         row_value = None
 
         if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
 
+        print(f"🔹 row_pressed_contrat - page={self.page}, row_num={row_num}")
+        print(f"   index_global={index_global}, row_value={row_value}")
+
         async def maj_ecran():
             try:
+                if not row_value:
+                    print("❌ Erreur: row_value est None")
+                    return
+                    
                 self.current_client = await self.database.get_current_contrat(self.client_name,self.reverse_date(row_value[0]), row_value[1])
                 if type(self.current_client) is None:
                     toast('Veuillez réessayer dans quelques secondes')
@@ -2191,36 +2413,38 @@ class Screen(MDApp):
 
         if self.liste_client.parent:
             self.liste_client.parent.remove_widget(self.liste_client)
-
         if client_data:
-            # ✅ CORRECTION: Créer un tuple pour affichage (4 colonnes) ET un mapping client_id
+            # ✅ Créer un tuple pour affichage (4 colonnes) ET un mapping index_global -> client_id
             row_data = [(i[1], i[2], i[3], self.reverse_date(i[4])) for i in client_data]
-            # ✅ Stocker les IDs pour les récupérer dans row_pressed_client
-            self.client_id_map = {idx: i[0] for idx, i in enumerate(client_data)}
+            # ✅ Stocker les IDs avec index global (non index local)
+            # Index global = position dans la liste COMPLÈTE (pas juste la page courante)
+            self.client_id_map = {idx: client_data[idx][0] for idx in range(len(client_data))}
+            
+            print(f"📊 client_id_map créé: {len(self.client_id_map)} clients")
+            print(f"   Premiers IDs: {dict(list(self.client_id_map.items())[:3])}")
 
             pagination = self.liste_client.pagination
 
             btn_prev = pagination.ids.button_back
             btn_next = pagination.ids.button_forward
 
-            self.main_page = 1
-
             def on_press_page(direction, instance=None):
-                print(direction)
+                print(f"📄 Pagination client: {direction} | page avant: {self.main_page_client}")
                 max_page = (len(row_data) - 1) // 8 + 1
-                if direction == 'moins' and self.main_page > 1:
-                    self.main_page -= 1
-                elif direction == 'plus' and self.main_page < max_page:
-                    self.main_page += 1
-                print(self.main_page)
+                if direction == 'moins' and self.main_page_client > 1:
+                    self.main_page_client -= 1
+                elif direction == 'plus' and self.main_page_client < max_page:
+                    self.main_page_client += 1
+                print(f"   page après: {self.main_page_client}")
 
             btn_prev.bind(on_press=partial(on_press_page, 'moins'))
             btn_next.bind(on_press=partial(on_press_page, 'plus'))
 
             self.liste_client.row_data = row_data
             self.liste_client.bind(on_row_press=self.row_pressed_client)
-            place.clear_widgets()
-            place.add_widget(self.liste_client)
+            
+            # ✅ Afficher avec délai pour que le contenu se charge bien
+            self._display_table_with_delay(place, self.liste_client, delay=0.4)
 
     def historique_par_client(self, source):
         self.fermer_ecran()
@@ -2235,8 +2459,10 @@ class Screen(MDApp):
 
         async def get_histo():
             try:
-                print(self.current_client)
-                result = await self.database.get_historic_par_client(self.current_client[1])
+                # ✅ Utiliser client_id (index 0) au lieu du nom (index 1)
+                client_id = self.current_client[0]
+                print(f"📜 Historique: cherche pour client_id={client_id}")
+                result = await self.database.get_historic_par_client(client_id)
                 data = []
                 id_planning = []
 
@@ -2244,13 +2470,17 @@ class Screen(MDApp):
                     for i in result:
                         data.append(i)
                         id_planning.append(i[4])
+                    print(f"✅ Historique: {len(data)} éléments trouvés")
                 else:
+                    print(f"⚠️ Historique: aucun élément trouvé pour client_id={client_id}")
                     data.append(('Aucun', 'Aucun', 'Aucun', 'Aucun'))
 
                 Clock.schedule_once(lambda dt: self.tableau_historic(place, data, id_planning), 0)
 
             except Exception as e:
-                print('par client',e)
+                print(f'❌ Erreur historique par client: {e}')
+                import traceback
+                traceback.print_exc()
 
         def maj_ecran():
             asyncio.run_coroutine_threadsafe(get_histo(), self.loop)
@@ -2266,9 +2496,9 @@ class Screen(MDApp):
             print(e)
 
     def row_pressed_client(self, table, row):
+        # ✅ RESTAURÉ: Calcul simple de l'index global (ancien système)
         row_num = int(row.index / len(table.column_data))
-        # ✅ CORRECTION: Calculer index_global en tenant compte de la pagination (8 par page)
-        index_global = (self.main_page - 1) * 8 + row_num
+        index_global = (self.main_page_client - 1) * 8 + row_num
         row_value = None
         client_id = None
 
@@ -2277,66 +2507,57 @@ class Screen(MDApp):
             # ✅ Récupérer client_id du mapping
             client_id = self.client_id_map.get(index_global)
         
-        print(f"🔹 row_pressed_client - client sélectionné: {row_value}, ID: {client_id}")
+        print(f"🔹 row_pressed_client - page={self.main_page_client}, row_num={row_num}, index_global={index_global}")
+        print(f"   client: {row_value}, client_id: {client_id}")
         
-        if not client_id:
-            print("❌ Erreur: client_id introuvable")
-            self.show_dialog('Erreur', 'Impossible de récupérer l\'ID du client')
+        if not client_id or not row_value:
+            print("❌ Erreur: client_id ou row_value introuvable")
+            toast('Impossible de récupérer le client')
             return
         
-        # ✅ Récupérer la date du contrat du client d'abord
-        async def current_client_info_async(cid):
-            try:
-                # Étape 1: Récupérer la date du contrat actif/récent par CLIENT_ID
-                print(f"🔍 Cherche contrat pour client_id: {cid}")
-                contrat_date = await self.database.get_latest_contract_date_for_client(cid)
-                print(f"📅 Date contrat trouvée: {contrat_date}")
-                if not contrat_date:
-                    print(f"⚠️ Aucun contrat trouvé pour client_id {cid}")
-                    return
-                # Étape 2: Récupérer les infos complètes du client avec cette date
-                print(f"📥 Charger infos client pour client_id: {cid}, date: {contrat_date}")
-                self.current_client = await self.database.get_current_client(cid, contrat_date)
-                print(f"✅ current_client chargé: {self.current_client is not None}")
-                if self.current_client:
-                    print(f"   Nom: {self.current_client[1]} {self.current_client[2]}")
-            except Exception as e:
-                print(f"❌ Erreur row_pressed_client: {e}")
-                import traceback
-                traceback.print_exc()
+        # ✅ Ouvrir la fenêtre immédiatement
+        Clock.schedule_once(lambda x: self.fenetre_client('', 'option_client'), 0)
+        
+        # ✅ Lancer la requête async
+        asyncio.run_coroutine_threadsafe(self.current_client_info(row_value[0], row_value[3]), self.loop)
 
-        asyncio.run_coroutine_threadsafe(current_client_info_async(client_id), self.loop)
-
-        def maj_ecran():
-            print(f"🎨 maj_ecran - current_client: {self.current_client is not None}")
-            if not self.current_client:
-                print("⚠️ current_client est None! Aucun contrat trouvé pour ce client")
-                Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Aucun contrat trouvé pour ce client'), 0)
-                Clock.schedule_once(lambda dt: self.dismiss_popup(), 0.5)
-                return
-            else:
-                print(f"✨ Affichage des infos client")
-                if self.current_client[3] == 'Particulier':
-                    nom = self.current_client[1] + ' ' + self.current_client[2]
+        # ✅ Utiliser Clock.schedule_once avec tentatives (pas de threads!)
+        attempt = [0]  # Mutable pour fermeture
+        
+        def maj_ecran_with_retry(dt=None):
+            """Affiche UI - retry si current_client n'est pas encore prêt"""
+            if self.current_client is None:
+                attempt[0] += 1
+                if attempt[0] < 30:  # Max 3s (30 x 0.1s)
+                    # Réessayer dans 100ms
+                    Clock.schedule_once(maj_ecran_with_retry, 0.1)
                 else:
-                    nom = self.current_client[1]
+                    # Timeout
+                    toast('Veuillez réessayer dans quelques secondes')
+                return
+            
+            # ✅ current_client est maintenant prêt
+            if self.current_client[3] == 'Particulier':
+                nom = self.current_client[1] + ' ' + self.current_client[2]
+            else:
+                nom = self.current_client[1]
 
-                if self.current_client[6] == 'Indéterminée':
-                    fin = self.reverse_date(self.current_client[8])
-                else :
-                    fin = self.current_client[8]
+            if self.current_client[6] == 'Indéterminée':
+                fin = self.reverse_date(self.current_client[8])
+            else:
+                fin = self.current_client[8]
 
-                self.popup.get_screen('option_client').ids.titre.text = f'A propos de {nom}'
-                self.popup.get_screen('option_client').ids.date_contrat.text = f'Contrat du : {self.reverse_date(self.current_client[4])}'
-                self.popup.get_screen('option_client').ids.debut_contrat.text = f'Début du contrat : {self.reverse_date(self.current_client[7])}'
-                self.popup.get_screen('option_client').ids.fin_contrat.text = f'Fin du contrat : {fin}'
-                self.popup.get_screen('option_client').ids.type_traitement.text = f'Type de traitement : {self.current_client[5]}'
-                self.popup.get_screen('option_client').ids.duree.text = f'Durée du contrat : {self.current_client[6]}'
+            self.popup.get_screen('option_client').ids.titre.text = f'A propos de {nom}'
+            self.popup.get_screen('option_client').ids.date_contrat.text = f'Contrat du : {self.reverse_date(self.current_client[4])}'
+            self.popup.get_screen('option_client').ids.debut_contrat.text = f'Début du contrat : {self.reverse_date(self.current_client[7])}'
+            self.popup.get_screen('option_client').ids.fin_contrat.text = f'Fin du contrat : {fin}'
+            self.popup.get_screen('option_client').ids.type_traitement.text = f'Type de traitement : {self.current_client[5]}'
+            self.popup.get_screen('option_client').ids.duree.text = f'Durée du contrat : {self.current_client[6]}'
 
-        # ⏱️ TIMING FIX: Ouvrir fenêtre après 0.1s (laisser async commencer)
-        # Afficher infos après 1.0s (laisser requête terminer)
-        Clock.schedule_once(lambda x: self.fenetre_client('', 'option_client'), 0.1)
-        Clock.schedule_once(lambda x: maj_ecran(), 1.0)
+        # ✅ Lancer la première tentative après 0.1s (temps pour async de démarrer)
+        Clock.schedule_once(maj_ecran_with_retry, 0.1)
+
+
 
     @mainthread
     def tableau_planning(self, place, result, dt=None):
@@ -2388,24 +2609,23 @@ class Screen(MDApp):
             btn_prev = pagination.ids.button_back
             btn_next = pagination.ids.button_forward
 
-            self.main_page = 1
-
             def on_press_page(direction, instance=None):
-                print(direction)
-                max_page = (len(row_data) - 1) // 5 + 1
-                if direction == 'moins' and self.main_page > 1:
-                    self.main_page -= 1
-                elif direction == 'plus' and self.main_page < max_page:
-                    self.main_page += 1
-                print(self.main_page)
+                print(f"📄 Pagination planning: {direction} | page avant: {self.main_page_planning}")
+                max_page = (len(row_data) - 1) // 8 + 1
+                if direction == 'moins' and self.main_page_planning > 1:
+                    self.main_page_planning -= 1
+                elif direction == 'plus' and self.main_page_planning < max_page:
+                    self.main_page_planning += 1
+                print(f"   page après: {self.main_page_planning}")
 
             btn_prev.bind(on_press=partial(on_press_page, 'moins'))
             btn_next.bind(on_press=partial(on_press_page, 'plus'))
             self.liste_planning.row_data = row_data
 
-            self.liste_planning.bind(on_row_press= partial(self.row_pressed_planning, liste_id))
+            self.liste_planning.bind(on_row_press=partial(self.row_pressed_planning, liste_id))
 
-            place.add_widget(self.liste_planning)
+            # ✅ Afficher avec délai
+            self._display_table_with_delay(place, self.liste_planning, delay=0.4)
             #del self.liste_planning
         except Exception as e:
             print(f"Error creating planning table: {e}")
@@ -2457,50 +2677,65 @@ class Screen(MDApp):
                 ]
             )
 
-            def _():
-                self.liste_select_planning.row_data = row_data
-
             pagination = self.liste_select_planning.pagination
             btn_prev = pagination.ids.button_back
             btn_next = pagination.ids.button_forward
 
-            self.page = 1
+            # ✅ Simple pagination locale (pas de paginator global)
+            self.page_select_planning = 1
 
-            def on_press_page( direction, instance=None):
-                print(direction)
+            def on_press_page(direction, instance=None):
+                print(f"📄 Select Planning: {direction} | page avant: {self.page_select_planning}")
                 max_page = (len(row_data) - 1) // 5 + 1
-                if direction == 'moins' and self.page > 1:
-                    self.page -= 1
-                elif direction == 'plus' and self.page < max_page:
-                    self.page += 1
-                print(self.page)
+                if direction == 'moins' and self.page_select_planning > 1:
+                    self.page_select_planning -= 1
+                elif direction == 'plus' and self.page_select_planning < max_page:
+                    self.page_select_planning += 1
+                print(f"   page après: {self.page_select_planning}")
 
-            btn_prev.bind(on_press=partial(on_press_page,  'moins'))
-            btn_next.bind(on_press=partial(on_press_page,  'plus'))
+            btn_prev.bind(on_press=partial(on_press_page, 'moins'))
+            btn_next.bind(on_press=partial(on_press_page, 'plus'))
 
             self.liste_select_planning.bind(
                 on_row_press=lambda instance, row: self.row_pressed_tableau_planning(traitement, instance, row))
+            
+            # ✅ Afficher avec délai
+            def set_and_display():
+                self.liste_select_planning.row_data = row_data
+                self._display_table_with_delay(place, self.liste_select_planning, delay=0.4)
+            
             place.add_widget(self.liste_select_planning)
-            Clock.schedule_once(lambda dt :_(),0)
+            Clock.schedule_once(lambda dt :set_and_display(),0)
 
 
         except Exception as e:
             print(f'Error creating planning_detail table: {e}')
 
     def row_pressed_planning(self, list_id, table, row):
+        # ✅ RESTAURÉ: Calcul simple de l'index global
         row_num = int(row.index / len(table.column_data))
-        row_data = table.row_data[row_num]
+        index_global = (self.main_page_planning - 1) * 8 + row_num
 
         row_value = None
-        index_global = (self.main_page - 1) * 8 + row_num
-
+        planning_id = None
+        
         if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
+            # ✅ Vérifier que list_id a assez d'éléments
+            if index_global < len(list_id):
+                planning_id = list_id[index_global]
 
+        print(f"🔹 row_pressed_planning - page={self.main_page_planning}, row_num={row_num}")
+        print(f"   index_global={index_global}, row_value={row_value}, planning_id={planning_id}")
+        
+        if not row_value or not planning_id:
+            print("❌ Erreur: données invalides pour planning")
+            toast('Impossible de récupérer les données du planning')
+            return
+            
         self.fenetre_planning('', 'selection_planning')
-        print(row_value)
-        if row_value :
-            Clock.schedule_once(lambda dt: self.get_and_update(row_value[1], row_value[0], list_id[row_num]), 0)
+        # ✅ Utiliser Clock.schedule avec délai court pour laisser la fenêtre s'ouvrir
+        Clock.schedule_once(lambda dt: self.get_and_update(row_value[1], row_value[0], planning_id), 0.1)
 
     def get_and_update(self, data1, data2, data3):
         asyncio.run_coroutine_threadsafe(self.planning_par_traitement(data1, data2, data3), self.loop)
@@ -2528,22 +2763,27 @@ class Screen(MDApp):
         Clock.schedule_once(lambda ct: maj_ecran(), 0.5)
 
     def row_pressed_tableau_planning(self, traitement,  table, row):
+        # ✅ RESTAURÉ: Calcul simple de l'index global
         row_num = int(row.index / len(table.column_data))
-        row_data = table.row_data[row_num]
-
+        # Note: Pour this tableau, page est self.page (voir tableau_selection_planning)
         index_global = (self.page - 1) * 5 + row_num
+        row_value = None
 
         if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
 
-        print(row_value)
+        print(f"🔹 row_pressed_tableau_planning - page={self.page}, row_num={row_num}")
+        print(f"   index_global={index_global}, row_value={row_value}")
 
         self.dismiss_popup()
         self.fermer_ecran()
 
         async def get():
-            self.planning_detail = await self.database.get_info_planning(traitement, self.reverse_date(row_value[0]))
-            print(self.planning_detail, type(self.planning_detail))
+            if row_value:
+                self.planning_detail = await self.database.get_info_planning(traitement, self.reverse_date(row_value[0]))
+                print(self.planning_detail, type(self.planning_detail))
+            else:
+                print("⚠️ row_value est None, impossible de charger planning_detail")
 
         asyncio.run_coroutine_threadsafe(get(), self.loop)
 
@@ -2727,50 +2967,53 @@ class Screen(MDApp):
         btn_prev = pagination.ids.button_back
         btn_next = pagination.ids.button_forward
 
-        self.main_page = 1
+        def on_press_page(direction, instance=None):
+            print(f"📄 Pagination historique: {direction} | page avant: {self.main_page_historic}")
+            max_page = (len(row_data) - 1) // 8 + 1
+            if direction == 'moins' and self.main_page_historic > 1:
+                self.main_page_historic -= 1
+            elif direction == 'plus' and self.main_page_historic < max_page:
+                self.main_page_historic += 1
+            print(f"   page après: {self.main_page_historic}")
 
-        def on_press_page( direction, instance=None):
-            print(direction)
-            max_page = (len(row_data) - 1) // 5 + 1
-            if direction == 'moins' and self.main_page > 1:
-                self.main_page -= 1
-            elif direction == 'plus' and self.main_page < max_page:
-                self.main_page += 1
-            print(self.main_page)
+        btn_prev.bind(on_press=partial(on_press_page, 'moins'))
+        btn_next.bind(on_press=partial(on_press_page, 'plus'))
 
-        btn_prev.bind(on_press=partial(on_press_page,  'moins'))
-        btn_next.bind(on_press=partial(on_press_page,  'plus'))
-
+        # ✅ CORRECTION: Assigner les données au tableau AVANT l'affichage
         self.historique.row_data = row_data
-        # ✅ CORRECTION: Utiliser partial pour capturer planning_id correctement
+        
+        # ✅ Afficher avec délai
         self.historique.bind(on_row_press=partial(self.row_pressed_histo, planning_id=planning_id))
-        place.add_widget(self.historique)
+        self._display_table_with_delay(place, self.historique, delay=0.4)
 
     def row_pressed_histo(self, table, row, planning_id):
+        # ✅ RESTAURÉ: Calcul simple de l'index global
         row_num = int(row.index / len(table.column_data))
-        row_data = table.row_data
-        index_global = (self.main_page - 1) * 5 + row_num
+        index_global = (self.main_page_historic - 1) * 8 + row_num
+        row_value = None
 
         if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
+        print(f"🔹 row_pressed_histo - page={self.main_page_historic}, row_num={row_num}")
+        print(f"   index_global={index_global}, row_value={row_value}")
 
-        if row_value[0] == 'Aucun':
+        if row_value and row_value[0] == 'Aucun':
             return
 
-        # ✅ CORRECTION: Vérifier que row_num est dans les limites et que planning_id n'est pas None
+        # ✅ Vérifier que planning_id est valide et index_global est dans les limites
         if not isinstance(planning_id, list):
             print(f"❌ Erreur: planning_id n'est pas une liste: {type(planning_id)}")
-            Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Erreur: Historique non disponible'), 0)
+            toast('Erreur: Historique non disponible')
             return
         
-        if row_num >= len(planning_id):
-            print(f"❌ Erreur: row_num={row_num} hors limites de planning_id (len={len(planning_id)})")
-            Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Erreur: Historique non disponible'), 0)
+        if index_global >= len(planning_id):
+            print(f"❌ Erreur: index_global={index_global} hors limites de planning_id (len={len(planning_id)})")
+            toast('Erreur: Historique non disponible')
             return
         
-        if planning_id[row_num] is None:
-            print(f"❌ Erreur: planning_id[{row_num}] est None")
-            Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Erreur: Cet historique n\'a pas de planning associé'), 0)
+        if planning_id[index_global] is None:
+            print(f"❌ Erreur: planning_id[{index_global}] est None")
+            toast('Erreur: Cet historique n\'a pas de planning associé')
             return
 
         place = self.popup.get_screen('histo_remarque').ids.tableau_rem_histo
@@ -2778,7 +3021,7 @@ class Screen(MDApp):
         self.fenetre_histo('', 'histo_remarque')
 
         def get_data():
-            asyncio.run_coroutine_threadsafe(self.historique_remarque(place, planning_id[row_num]), self.loop)
+            asyncio.run_coroutine_threadsafe(self.historique_remarque(place, planning_id[index_global]), self.loop)
 
         Clock.schedule_once(lambda c: self.loading_spinner(self.popup, 'histo_remarque'), 0)
         Clock.schedule_once(lambda c: get_data(), 0)
@@ -2847,11 +3090,13 @@ class Screen(MDApp):
                     ("Action", dp(30)),
                 ]
             )
-            def _():
+            
+            # ✅ Afficher avec délai
+            def set_and_display():
                 self.remarque_historique.row_data = row_data
-
-            place.add_widget(self.remarque_historique)
-            Clock.schedule_once(lambda dt: _(), 0.1)
+                self._display_table_with_delay(place, self.remarque_historique, delay=0.4)
+            
+            Clock.schedule_once(lambda dt: set_and_display(), 0.1)
 
         except Exception as e:
             print(f'Erreur lors de la création du tableau des remarques historiques : {e}')
