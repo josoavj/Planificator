@@ -947,7 +947,7 @@ class Screen(MDApp):
                 buttons=[
                     MDFlatButton(
                         text="OK",
-                        on_release=lambda x: self.close_dialog()
+                        on_release=self.close_dialog
                     )
                 ],
             )
@@ -958,24 +958,28 @@ class Screen(MDApp):
                 buttons=[
                     MDFlatButton(
                         text='OUI',
-                        on_release= lambda x: self.deconnexion()
+                        on_release=self.deconnexion
                     ),
                     MDFlatButton(
                         text= 'NON',
-                        on_release= lambda x: self.close_dialog()
+                        on_release= self.close_dialog
                     )
                 ]
             )
         self.dialogue.open()
 
-    def deconnexion(self):
+    def deconnexion(self, *args):
         self.close_dialog()
         self.root.current = 'before login'
         self.admin = False
         self.compte = None
 
-    def close_dialog(self):
-        self.dialogue.dismiss()
+    def close_dialog(self, *args):
+        """Ferme le dialogue courant"""
+        if hasattr(self, 'dialogue') and self.dialogue:
+            self.dialogue.dismiss()
+            self.dialogue = None
+        print("✅ Dialogue fermé")
 
     def reverse_date(self, ex_date):
         if not ex_date:
