@@ -1,19 +1,45 @@
 from kivy.lang.builder import Builder
 from kivy.uix.screenmanager import SlideTransition
+from kivy.clock import Clock
+
+
+def gestion_ecran_optimized(root):
+    """
+    ✅ OPTIMISATION: Charger uniquement Home.kv au démarrage.
+    Les autres écrans se chargent en arrière-plan ou lazy-loaded.
+    """
+    try:
+        # Charger immédiatement Home (essentiel pour l'affichage)
+        root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/Home.kv'))
+        print("✅ Home.kv chargé immédiatement")
+        
+        # Charger les autres écrans en arrière-plan (non-bloquant)
+        def load_other_screens():
+            try:
+                root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/historique/historique.kv'))
+                root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/historique/choix_traitement.kv'))
+                root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/contrat/contrat.kv'))
+                root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/planning/planning.kv'))
+                root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/about.kv'))
+                root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/client/Client.kv'))
+                root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/compte/compte.kv'))
+                root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/compte/compte_not_admin.kv'))
+                print("✅ Tous les écrans gestion_ecran chargés en arrière-plan")
+            except Exception as e:
+                print(f"⚠️ Erreur chargement écrans en arrière-plan: {e}")
+        
+        # Planifier le chargement en arrière-plan avec un délai de 0.5s
+        Clock.schedule_once(lambda dt: load_other_screens(), 0.5)
+        
+        root.get_screen('Sidebar').ids['gestion_ecran'].transition = SlideTransition(direction='up')
+    except Exception as e:
+        print(f"❌ Erreur gestion_ecran_optimized: {e}")
 
 
 def gestion_ecran(root):
-    root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/Home.kv'))
-    root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/historique/historique.kv'))
-    root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/historique/choix_traitement.kv'))
-    root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/contrat/contrat.kv'))
-    root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/planning/planning.kv'))
-    root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/about.kv'))
-    root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/client/Client.kv'))
-    root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/compte/compte.kv'))
-    root.get_screen('Sidebar').ids['gestion_ecran'].add_widget(Builder.load_file('screen/compte/compte_not_admin.kv'))
+    """Version originale (non-optimisée) pour compatibilité"""
+    gestion_ecran_optimized(root)
 
-    root.get_screen('Sidebar').ids['gestion_ecran'].transition = SlideTransition(direction='up')
 
 def popup(manager, init_only=True):
     """Charger les écrans popup - init_only=True pour démarrage rapide"""
