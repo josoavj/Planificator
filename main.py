@@ -16,10 +16,13 @@ Window.maxHeight = 680
 import asyncio
 import threading
 import locale
+import logging
 locale.setlocale(locale.LC_TIME, "fr_FR.utf8")  # Pour linux/MAC - Windows: French_France.1252
 
 from datetime import datetime
 from functools import partial
+
+logger = logging.getLogger(__name__)
 
 from kivy.metrics import dp
 from kivymd.app import MDApp
@@ -75,7 +78,7 @@ class Screen(MDApp):
             if place and table:
                 place.clear_widgets()
                 place.add_widget(table)
-                print(f"✅ Tableau ajouté après {delay}s")
+                logger.info(f"✅ Tableau ajouté après {delay}s")
         
         Clock.schedule_once(lambda dt: add_table(), delay)
 
@@ -144,14 +147,14 @@ class Screen(MDApp):
     def _finish_loading(self, screen):
         """Passer du loading screen à l'écran d'accueil"""
         screen.current = 'before login'
-        print("✅ Application chargée, passage à l'écran d'accueil")
+        logger.info("✅ Application chargée, passage à l'écran d'accueil")
 
     def _initialize_tables(self):
         """Créer les tables à la demande (lazy loading) - appelé après le login"""
         if self._tables_initialized:
             return  # Éviter de créer les tables deux fois
         
-        print("⏳ Initialisation des tableaux...")
+        logger.info("⏳ Initialisation des tableaux...")
         
         # ✅ Créer toutes les tables une seule fois
         self.table_en_cours = MDDataTable(
@@ -260,7 +263,7 @@ class Screen(MDApp):
         )
         
         self._tables_initialized = True
-        print("✅ Tableaux initialisés avec succès")
+        logger.info("✅ Tableaux initialisés avec succès")
 
     def login(self):
         """Gestion de l'action de connexion."""
@@ -1437,7 +1440,8 @@ class Screen(MDApp):
         from kivymd.uix.dialog import MDDialog
 
         self.popup.current = 'vide'
-        self.dismiss_popup()
+        # ✅ NE PAS appeler dismiss_popup() ici - ça supprime la popup du widget tree!
+        # dismiss_popup() sera appelée dans on_dismiss du dialog
         if self.dialog != None:
             self.fermer_ecran()
         self.popup.current = ecran
@@ -1770,7 +1774,13 @@ class Screen(MDApp):
         self.fenetre_planning('', 'ecran_decalage')
 
     def switch_to_home(self):
-        self.root.get_screen('Sidebar').ids['gestion_ecran'].current =  'Home'
+        # ✅ S'assurer que les tables sont initialisées
+        if not self._tables_initialized:
+            self._initialize_tables()
+        
+        self.root.get_screen('Sidebar').ids['gestion_ecran'].current = 'Home'
+        # ✅ Recharger les données de l'accueil pour refléter les changements de la BD
+        asyncio.run_coroutine_threadsafe(self.populate_tables(), self.loop)
 
     def switch_to_login(self):
         self.root.current = 'login'
@@ -1812,33 +1822,47 @@ class Screen(MDApp):
         self.root.get_screen('Sidebar').ids['gestion_ecran'].current =  'about'
 
     def switch_to_main(self):
+        logger.info("🔹 switch_to_main() appelée")
         # ✅ ÉTAPE 1 - Charger Sidebar.kv + gestion_ecran si pas encore chargé (essentiel)
         if not self._main_screens_loaded:
+            logger.info("  ➜ Chargement Sidebar + gestion_ecran...")
             self._load_main_screens_async()
         
         # ✅ ÉTAPE 2 - Lazy load tables à la demande
         if not self._tables_initialized:
+            logger.info("  ➜ Initialisation des tables...")
             self._initialize_tables()
         
         # ✅ ÉTAPE 3 - Charger populate_tables une seule fois après authentification
         if not self._screens_initialized:
             self._screens_initialized = True
+            logger.info("  ➜ Appel populate_tables()...")
             asyncio.run_coroutine_threadsafe(self.populate_tables(), self.loop)
         
         # ✅ ÉTAPE 4 - Charger les écrans popup additionnels après login
+        logger.info(f"  ➜ _popup_full_loaded={self._popup_full_loaded}")
         if not self._popup_full_loaded:
+            logger.info("  ➜ Chargement des screens popup additionnels...")
             self._load_additional_popup_screens()
+        else:
+            logger.info("  ➜ Screens popup déjà chargés, skip")
         
-        self.root.current = 'Sidebar'
-        self.root.get_screen('Sidebar').ids['gestion_ecran'].current =  'Home'
+        # ✅ ÉTAPE 5 - Afficher Home avec un petit délai pour laisser populate_tables se charger
+        Clock.schedule_once(lambda dt: self._show_home_after_login(), 0.2)
         self.reset()
+
+    def _show_home_after_login(self):
+        """Affiche Home après que les données soient chargées"""
+        self.root.current = 'Sidebar'
+        self.root.get_screen('Sidebar').ids['gestion_ecran'].current = 'Home'
 
     def _load_additional_popup_screens(self):
         """Charger les écrans popup additionnels après le login"""
         from gestion_ecran import popup
+        logger.info("🔹 _load_additional_popup_screens() appelée - chargement des screens popup...")
         popup(self.popup, init_only=False)  # Charge TOUS les écrans
         self._popup_full_loaded = True
-        print("✅ Écrans popup additionnels chargés après login")
+        logger.info("✅ Écrans popup additionnels chargés après login")
 
     def _load_main_screens_async(self):
         """Charger Sidebar.kv + écrans de gestion après le login (main.kv déjà chargé au startup)"""
@@ -1859,14 +1883,14 @@ class Screen(MDApp):
             try:
                 gestion_ecran(self.root)
                 self._screens_initialized = True
-                print("✅ Écrans gestion_ecran chargés rapidement après Sidebar")
+                logger.info("✅ Écrans gestion_ecran chargés rapidement après Sidebar")
             except Exception as e:
-                print(f"⚠️ Erreur chargement gestion_ecran: {e}")
+                logger.warning(f"⚠️ Erreur chargement gestion_ecran: {e}")
             
             self._main_screens_loaded = True
-            print("✅ Sidebar.kv + écrans gestion_ecran chargés après login")
+            logger.info("✅ Sidebar.kv + écrans gestion_ecran chargés après login")
         except Exception as e:
-            print(f"❌ Erreur lors du chargement asynchrone: {e}")
+            logger.error(f"❌ Erreur lors du chargement asynchrone: {e}")
 
     def switch_to_contrat(self):
         self.root.get_screen('Sidebar').ids['gestion_ecran'].current = 'contrat'
@@ -1925,7 +1949,7 @@ class Screen(MDApp):
         except Exception as e:
             # Capture KeyError, AttributeError, ET ScreenManagerException
             # Le spinner n'existe pas ou l'écran n'existe pas, ignorer silencieusement
-            print(f"⚠️ Spinner '{ecran}' non trouvé: {e}")
+            logger.warning(f"⚠️ Spinner '{ecran}' non trouvé: {e}")
             pass
 
     def traitement_par_client(self, source):
@@ -2362,51 +2386,64 @@ class Screen(MDApp):
         if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
 
-        print(f"🔹 row_pressed_contrat - page={self.page}, row_num={row_num}")
-        print(f"   index_global={index_global}, row_value={row_value}")
+        logger.info(f"🔹 row_pressed_contrat - page={self.page}, row_num={row_num}")
+        logger.info(f"   index_global={index_global}, row_value={row_value}")
 
-        async def maj_ecran():
+        if not row_value:
+            logger.error("Erreur: row_value est None")
+            toast('Impossible de récupérer le contrat')
+            return
+
+        async def load_and_display():
             try:
-                if not row_value:
-                    print("❌ Erreur: row_value est None")
+                self.current_client = await self.database.get_current_contrat(
+                    self.client_name,
+                    self.reverse_date(row_value[0]),
+                    row_value[1]
+                )
+                
+                if self.current_client is None:
+                    logger.error("current_client est None")
                     return
-                    
-                self.current_client = await self.database.get_current_contrat(self.client_name,self.reverse_date(row_value[0]), row_value[1])
-                if type(self.current_client) is None:
-                    toast('Veuillez réessayer dans quelques secondes')
-                    return
-                else:
-                    if self.current_client[3] == 'Particulier':
-                        nom = self.current_client[1] + ' ' + self.current_client[2]
-                    else:
-                        nom = self.current_client[1]
-
-                    if self.current_client[6] == 'Indeterminée':
-                        fin = self.current_client[8]
-                    else :
-                        fin = self.reverse_date(self.current_client[8])
-
-                    self.popup.get_screen('option_contrat').ids.titre.text = f'A propos de {nom}'
-                    self.popup.get_screen(
-                        'option_contrat').ids.date_contrat.text = f'Contrat du : {self.reverse_date(self.current_client[4])}'
-                    self.popup.get_screen(
-                        'option_contrat').ids.debut_contrat.text = f'Début du contrat : {self.reverse_date(self.current_client[7])}'
-                    self.popup.get_screen(
-                        'option_contrat').ids.fin_contrat.text = f'Fin du contrat : {fin}'
-                    self.popup.get_screen(
-                        'option_contrat').ids.type_traitement.text = f'Type de traitement : {self.current_client[5]}'
-                    self.popup.get_screen(
-                        'option_contrat').ids.duree.text = f'Durée du contrat : {self.current_client[6]}'
-                    self.popup.get_screen(
-                        'option_contrat').ids.axe.text = f'Axe du client: {self.current_client[11]}'
-
+                
+                # Une fois chargé, afficher la fenêtre
+                Clock.schedule_once(lambda dt: self._display_contrat_info(), 0)
             except Exception as e:
-                print(e)
+                logger.error(f'Erreur lors du chargement du contrat: {e}', exc_info=True)
+                toast('Erreur lors du chargement du contrat')
 
-        def ecran():
-            asyncio.run_coroutine_threadsafe(maj_ecran(),self.loop)
+        asyncio.run_coroutine_threadsafe(load_and_display(), self.loop)
 
-        Clock.schedule_once(lambda x: ecran(), 0.5)
+    def _display_contrat_info(self):
+        """Affiche les informations du contrat une fois chargées"""
+        try:
+            if not self.current_client:
+                logger.warning('current_client n\'est pas chargé')
+                return
+            
+            # Afficher la fenêtre
+            self.fenetre_client('', 'option_contrat')
+            
+            # Mettre à jour les données
+            if self.current_client[3] == 'Particulier':
+                nom = self.current_client[1] + ' ' + self.current_client[2]
+            else:
+                nom = self.current_client[1]
+
+            if self.current_client[6] == 'Indeterminée':
+                fin = self.current_client[8]
+            else:
+                fin = self.reverse_date(self.current_client[8])
+
+            self.popup.get_screen('option_contrat').ids.titre.text = f'A propos de {nom}'
+            self.popup.get_screen('option_contrat').ids.date_contrat.text = f'Contrat du : {self.reverse_date(self.current_client[4])}'
+            self.popup.get_screen('option_contrat').ids.debut_contrat.text = f'Début du contrat : {self.reverse_date(self.current_client[7])}'
+            self.popup.get_screen('option_contrat').ids.fin_contrat.text = f'Fin du contrat : {fin}'
+            self.popup.get_screen('option_contrat').ids.type_traitement.text = f'Type de traitement : {self.current_client[5]}'
+            self.popup.get_screen('option_contrat').ids.duree.text = f'Durée du contrat : {self.current_client[6]}'
+            self.popup.get_screen('option_contrat').ids.axe.text = f'Axe du client: {self.current_client[11]}'
+        except Exception as e:
+            logger.error(f'Erreur affichage info contrat: {e}', exc_info=True)
 
     @mainthread
     def update_client_table_and_switch(self, place, client_data):
@@ -2507,36 +2544,36 @@ class Screen(MDApp):
             # ✅ Récupérer client_id du mapping
             client_id = self.client_id_map.get(index_global)
         
-        print(f"🔹 row_pressed_client - page={self.main_page_client}, row_num={row_num}, index_global={index_global}")
-        print(f"   client: {row_value}, client_id: {client_id}")
+        logger.info(f"🔹 row_pressed_client - page={self.main_page_client}, row_num={row_num}, index_global={index_global}")
+        logger.info(f"   client: {row_value}, client_id: {client_id}")
         
         if not client_id or not row_value:
-            print("❌ Erreur: client_id ou row_value introuvable")
+            logger.error("Erreur: client_id ou row_value introuvable")
             toast('Impossible de récupérer le client')
             return
         
-        # ✅ Ouvrir la fenêtre immédiatement
-        Clock.schedule_once(lambda x: self.fenetre_client('', 'option_client'), 0)
+        # ✅ Charger les données asynchroniquement
+        async def load_and_display():
+            try:
+                self.current_client = await self.database.get_current_client(client_id, self.reverse_date(row_value[3]))
+                # Une fois chargé, afficher la fenêtre
+                Clock.schedule_once(lambda dt: self._display_client_info(), 0)
+            except Exception as e:
+                logger.error(f"Erreur lors du chargement du client: {e}", exc_info=True)
         
-        # ✅ Lancer la requête async
-        asyncio.run_coroutine_threadsafe(self.current_client_info(row_value[0], row_value[3]), self.loop)
+        asyncio.run_coroutine_threadsafe(load_and_display(), self.loop)
 
-        # ✅ Utiliser Clock.schedule_once avec tentatives (pas de threads!)
-        attempt = [0]  # Mutable pour fermeture
-        
-        def maj_ecran_with_retry(dt=None):
-            """Affiche UI - retry si current_client n'est pas encore prêt"""
-            if self.current_client is None:
-                attempt[0] += 1
-                if attempt[0] < 30:  # Max 3s (30 x 0.1s)
-                    # Réessayer dans 100ms
-                    Clock.schedule_once(maj_ecran_with_retry, 0.1)
-                else:
-                    # Timeout
-                    toast('Veuillez réessayer dans quelques secondes')
+    def _display_client_info(self):
+        """Affiche les informations du client une fois chargées"""
+        try:
+            if not self.current_client:
+                logger.warning('current_client n\'est pas chargé')
                 return
             
-            # ✅ current_client est maintenant prêt
+            # Afficher la fenêtre
+            self.fenetre_client('', 'option_client')
+            
+            # Mettre à jour les données
             if self.current_client[3] == 'Particulier':
                 nom = self.current_client[1] + ' ' + self.current_client[2]
             else:
@@ -2553,11 +2590,8 @@ class Screen(MDApp):
             self.popup.get_screen('option_client').ids.fin_contrat.text = f'Fin du contrat : {fin}'
             self.popup.get_screen('option_client').ids.type_traitement.text = f'Type de traitement : {self.current_client[5]}'
             self.popup.get_screen('option_client').ids.duree.text = f'Durée du contrat : {self.current_client[6]}'
-
-        # ✅ Lancer la première tentative après 0.1s (temps pour async de démarrer)
-        Clock.schedule_once(maj_ecran_with_retry, 0.1)
-
-
+        except Exception as e:
+            logger.error(f'Erreur affichage info client: {e}', exc_info=True)
 
     @mainthread
     def tableau_planning(self, place, result, dt=None):
@@ -2712,30 +2746,19 @@ class Screen(MDApp):
             print(f'Error creating planning_detail table: {e}')
 
     def row_pressed_planning(self, list_id, table, row):
-        # ✅ RESTAURÉ: Calcul simple de l'index global
         row_num = int(row.index / len(table.column_data))
-        index_global = (self.main_page_planning - 1) * 8 + row_num
+        row_data = table.row_data[row_num]
 
         row_value = None
-        planning_id = None
-        
+        index_global = (self.main_page_planning - 1) * 8 + row_num
+
         if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
-            # ✅ Vérifier que list_id a assez d'éléments
-            if index_global < len(list_id):
-                planning_id = list_id[index_global]
 
-        print(f"🔹 row_pressed_planning - page={self.main_page_planning}, row_num={row_num}")
-        print(f"   index_global={index_global}, row_value={row_value}, planning_id={planning_id}")
-        
-        if not row_value or not planning_id:
-            print("❌ Erreur: données invalides pour planning")
-            toast('Impossible de récupérer les données du planning')
-            return
-            
         self.fenetre_planning('', 'selection_planning')
-        # ✅ Utiliser Clock.schedule avec délai court pour laisser la fenêtre s'ouvrir
-        Clock.schedule_once(lambda dt: self.get_and_update(row_value[1], row_value[0], planning_id), 0.1)
+        logger.info(f"row_pressed_planning: {row_value}")
+        if row_value:
+            Clock.schedule_once(lambda dt: self.get_and_update(row_value[1], row_value[0], list_id[index_global]), 0)
 
     def get_and_update(self, data1, data2, data3):
         asyncio.run_coroutine_threadsafe(self.planning_par_traitement(data1, data2, data3), self.loop)
@@ -2755,35 +2778,30 @@ class Screen(MDApp):
                     threading.Thread(target=self.tableau_selection_planning(place, result, id_traitement)).start()
                     Clock.schedule_once(lambda dt :self.loading_spinner(self.popup, 'selection_planning', show=True))
             except Exception as e:
-                print('misy erreur :', e)
+                logger.error(f'Erreur: {e}', exc_info=True)
 
         def maj_ecran():
             asyncio.run_coroutine_threadsafe(details(), self.loop)
 
-        Clock.schedule_once(lambda ct: maj_ecran(), 0.5)
+        Clock.schedule_once(lambda ct: maj_ecran(), 0)
 
     def row_pressed_tableau_planning(self, traitement,  table, row):
-        # ✅ RESTAURÉ: Calcul simple de l'index global
         row_num = int(row.index / len(table.column_data))
-        # Note: Pour this tableau, page est self.page (voir tableau_selection_planning)
+        row_data = table.row_data[row_num]
+
         index_global = (self.page - 1) * 5 + row_num
-        row_value = None
 
         if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
 
-        print(f"🔹 row_pressed_tableau_planning - page={self.page}, row_num={row_num}")
-        print(f"   index_global={index_global}, row_value={row_value}")
+        logger.info(f"row_pressed_tableau_planning: {row_value}")
 
         self.dismiss_popup()
         self.fermer_ecran()
 
         async def get():
-            if row_value:
-                self.planning_detail = await self.database.get_info_planning(traitement, self.reverse_date(row_value[0]))
-                print(self.planning_detail, type(self.planning_detail))
-            else:
-                print("⚠️ row_value est None, impossible de charger planning_detail")
+            self.planning_detail = await self.database.get_info_planning(traitement, self.reverse_date(row_value[0]))
+            logger.info(f"planning_detail: {self.planning_detail}, type: {type(self.planning_detail)}")
 
         asyncio.run_coroutine_threadsafe(get(), self.loop)
 
@@ -2792,37 +2810,29 @@ class Screen(MDApp):
             self.popup.get_screen('modif_date').ids.date_decalage.text = ''
             self.modifier_date()
         else:
-            # ⏱️ CORRECTION: Attendre que self.planning_detail soit chargé (0.5s) AVANT d'appeler maj_ui()
-            Clock.schedule_once(lambda dt: self.fenetre_planning('', 'selection_element_tableau'), 0)
-            Clock.schedule_once(lambda dt: self.maj_ui(row_value), 0.5)
+            Clock.schedule_once(lambda dt: self.fenetre_planning('', 'selection_element_tableau'))
+            Clock.schedule_once(lambda dt: maj_ui())
 
-    def maj_ui(self, row_value):
-        """Affiche les infos du planning dans la fenêtre"""
-        try:
-            if not self.planning_detail:
-                print('⚠️ planning_detail n\'est pas encore chargé')
-                return
-            
-            print('Maj ui', self.planning_detail)
-            titre = self.planning_detail[1].split(' ')
-            self.popup.get_screen('selection_element_tableau').ids['titre'].text = f'{titre[0]} pour {self.planning_detail[0]}'
-            self.popup.get_screen('ajout_remarque').ids['titre'].text = f'{titre[0]} pour {self.planning_detail[0]}'
-            self.popup.get_screen('option_decalage').ids.client.text = f'Client: {self.planning_detail[0]}'
+        def maj_ui():
+            try:
+                logger.info(f'Maj ui: {self.planning_detail}')
+                titre = self.planning_detail[1].split(' ')
+                self.popup.get_screen('selection_element_tableau').ids['titre'].text = f'{titre[0]} pour {self.planning_detail[0]}'
+                self.popup.get_screen('ajout_remarque').ids['titre'].text = f'{titre[0]} pour {self.planning_detail[0]}'
+                self.popup.get_screen('option_decalage').ids.client.text = f'Client: {self.planning_detail[0]}'
 
-            self.popup.get_screen('selection_element_tableau').ids['contrat'].text = f'Contrat du {self.reverse_date(self.planning_detail[3])} au {self.planning_detail[4]}'
+                self.popup.get_screen('selection_element_tableau').ids['contrat'].text = f'Contrat du {self.reverse_date(self.planning_detail[3])} au {self.planning_detail[4]}'
 
-            self.popup.get_screen('selection_element_tableau').ids['mois'].text = f'Date du traitement : {row_value[0]}'
-            self.popup.get_screen('ajout_remarque').ids['date'].text = f'Date du traitement : {row_value[0]}'
+                self.popup.get_screen('selection_element_tableau').ids['mois'].text = f'Date du traitement : {row_value[0]}'
+                self.popup.get_screen('ajout_remarque').ids['date'].text = f'Date du traitement : {row_value[0]}'
 
-            self.popup.get_screen('selection_element_tableau').ids['mois_trait'].text = f'Mois du traitement: {row_value[1]}'
-            self.popup.get_screen('ajout_remarque').ids['mois_trait'].text = f'Mois du traitement: {row_value[1]}'
+                self.popup.get_screen('selection_element_tableau').ids['mois_trait'].text = f'Mois du traitement: {row_value[1]}'
+                self.popup.get_screen('ajout_remarque').ids['mois_trait'].text = f'Mois du traitement: {row_value[1]}'
 
-            self.popup.get_screen('ajout_remarque').ids['duree'].text = f'Durée total du traitement : {self.planning_detail[2]}'
+                self.popup.get_screen('ajout_remarque').ids['duree'].text = f'Durée total du traitement : {self.planning_detail[2]}'
 
-        except Exception as e:
-            print(f'❌ affichage detail: {e}')
-            import traceback
-            traceback.print_exc()
+            except Exception as e:
+                logger.error(f'affichage detail: {e}', exc_info=True)
 
     def afficher_ecran_remarque(self):
         self.fenetre_planning('', 'ajout_remarque')
@@ -3278,10 +3288,10 @@ class Screen(MDApp):
             try:
                 home = self.root.get_screen('Sidebar').ids['gestion_ecran'].get_screen('Home')
                 if not home:
-                    print('❌ ERREUR: Écran Home introuvable')
+                    logger.error('❌ Écran Home introuvable')
                     return
             except Exception as e:
-                print(f'❌ ERREUR: Impossible d\'accéder à Home: {e}')
+                logger.error(f'❌ Impossible d\'accéder à Home: {e}')
                 return
             
             now = datetime.now()
@@ -3293,7 +3303,7 @@ class Screen(MDApp):
                     self.database.traitement_prevision(now.year, now.month)
                 )
             except Exception as e:
-                print(f'❌ ERREUR BD populate_tables: {e}')
+                logger.error(f'❌ BD populate_tables: {e}')
                 Clock.schedule_once(
                     lambda dt: self.show_dialog('Erreur', 'Erreur lors du chargement des données')
                 )
@@ -3313,7 +3323,7 @@ class Screen(MDApp):
                         f"[color={color}]{i['axe']}[/color]"
                     ))
                 except Exception as e:
-                    print(f'⚠️ ERREUR traitement en_cours: {e}')
+                    logger.warning(f'⚠️ ERREUR traitement en_cours: {e}')
                     continue
             
             for i in data_prevision:
@@ -3325,37 +3335,35 @@ class Screen(MDApp):
                         row = (self.reverse_date(i["date"]), i["traitement"], i['etat'], i['axe'])
                         data_next.append(row)
                 except Exception as e:
-                    print(f'⚠️ ERREUR traitement prévision: {e}')
+                    logger.warning(f'⚠️ ERREUR traitement prévision: {e}')
                     continue
             
-            print(f'✅ populate_tables: {len(data_current)} en cours, {len(data_next)} à venir')
+            logger.info(f'✅ populate_tables: {len(data_current)} en cours, {len(data_next)} à venir')
             
             # Appelle home_tables avec gestion d'erreur
             Clock.schedule_once(lambda dt: self._safe_home_tables(data_current, data_next, home))
             
         except Exception as e:
-            print(f'❌ ERREUR CRITIQUE populate_tables: {e}')
-            import traceback
-            traceback.print_exc()
+            logger.error(f'❌ ERREUR CRITIQUE populate_tables: {e}', exc_info=True)
     
     def _safe_home_tables(self, current, next, home):
         """Affiche les tableaux avec gestion d'erreur complète"""
         try:
             if not home:
-                print('❌ ERREUR: home est None')
+                logger.error('❌ home est None')
                 return
             
             if not hasattr(home.ids, 'box_current') or not hasattr(home.ids, 'box_next'):
-                print('❌ ERREUR: box_current ou box_next introuvable')
+                logger.error('❌ box_current ou box_next introuvable')
                 return
             
             def update_data():
                 try:
                     self.table_en_cours.row_data = current
                     self.table_prevision.row_data = next
-                    print('✅ Tableaux mis à jour avec succès')
+                    logger.info('✅ Tableaux mis à jour avec succès')
                 except Exception as e:
-                    print(f'❌ ERREUR mise à jour row_data: {e}')
+                    logger.error(f'❌ ERREUR mise à jour row_data: {e}')
             
             # Nettoie les anciens tableaux
             try:
@@ -3363,26 +3371,24 @@ class Screen(MDApp):
                     self.table_en_cours.parent.remove_widget(self.table_en_cours)
                 if self.table_prevision.parent:
                     self.table_prevision.parent.remove_widget(self.table_prevision)
-                print('✅ Anciens tableaux supprimés')
+                logger.info('✅ Anciens tableaux supprimés')
             except Exception as e:
-                print(f'⚠️ ERREUR suppression anciens tableaux: {e}')
+                logger.warning(f'⚠️ ERREUR suppression anciens tableaux: {e}')
             
             # Ajoute les nouveaux tableaux
             try:
                 home.ids.box_current.add_widget(self.table_en_cours)
                 home.ids.box_next.add_widget(self.table_prevision)
-                print('✅ Nouveaux tableaux ajoutés')
+                logger.info('✅ Nouveaux tableaux ajoutés')
             except Exception as e:
-                print(f'❌ ERREUR ajout nouveaux tableaux: {e}')
+                logger.error(f'❌ ERREUR ajout nouveaux tableaux: {e}')
                 return
             
             # Met à jour les données
-            Clock.schedule_once(lambda dt: update_data(), .2)
+            Clock.schedule_once(lambda dt: update_data(), 0)
             
         except Exception as e:
-            print(f'❌ ERREUR CRITIQUE home_tables: {e}')
-            import traceback
-            traceback.print_exc()
+            logger.error(f'❌ ERREUR CRITIQUE _safe_home_tables: {e}', exc_info=True)
 
     def generer_excel(self):
         screen = self.popup.get_screen('rendu_planning')
