@@ -30,6 +30,7 @@ from kivymd.toast import toast
 
 from gestion_ecran import gestion_ecran, popup
 from excel import generate_comprehensive_facture_excel, generer_facture_excel, generate_traitements_excel
+from pagination_manager import TablePaginator, PaginationHelper
 
 
 class MyDatatable(MDDataTable):
@@ -79,6 +80,15 @@ class Screen(MDApp):
         self.current_client = None
         self.card = None
         self.dialog = None
+
+        # ✅ NOUVELLES: Paginateurs centralisés pour chaque tableau
+        self.paginator_contract = TablePaginator(rows_per_page=8)
+        self.paginator_client = TablePaginator(rows_per_page=8)
+        self.paginator_planning = TablePaginator(rows_per_page=8)
+        self.paginator_historic = TablePaginator(rows_per_page=8)
+        self.paginator_treat = TablePaginator(rows_per_page=4)
+        self.paginator_facture = TablePaginator(rows_per_page=5)
+        self.paginator_select_planning = TablePaginator(rows_per_page=5)
 
         self.table_en_cours = MDDataTable(
             use_pagination=True,
@@ -1068,28 +1078,30 @@ class Screen(MDApp):
         asyncio.run_coroutine_threadsafe(changer(old_clean, new_clean), self.loop)
 
     def screen_modifier_prix(self, table, row):
-        # ✅ CORRECTION: Récupérer correctement les données de la ligne cliquée
+        # ✅ Utiliser le paginateur pour les factures
         try:
-            # Récupérer le numéro de ligne
-            row_num = int(row.index / len(table.column_data))
+            row_num = PaginationHelper.calculate_row_num(row.index, len(table.column_data))
+            index_global = self.paginator_facture.get_global_index(row_num)
             
-            # ✅ CORRECTION: Vérifier que row_num est valide
-            if row_num < 0 or row_num >= len(table.row_data):
+            # ✅ Vérifier que l'index est valide
+            if not self.paginator_facture.is_valid_global_index(index_global):
                 Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Ligne invalide'), 0)
                 return
                 
-            row_value = table.row_data[row_num]
+            row_value = table.row_data[index_global]
             
-            # ✅ CORRECTION: Vérifier que row_value est valide
+            # ✅ Vérifier que row_value est valide
             if not row_value or len(row_value) < 2:
                 Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Données de ligne invalides'), 0)
                 return
             
-            # ✅ CORRECTION: Stocker les données avant ouverture du dialog
+            # ✅ Stocker les données avant ouverture du dialog
             self.date = self.reverse_date(row_value[0])
             prix_initial = row_value[1]
             
-            # ✅ CORRECTION: Attendre un peu puis ouvrir le dialog
+            print(f"🔹 screen_modifier_prix: {row_value} | {self.paginator_facture.debug_info()}")
+            
+            # ✅ Attendre un peu puis ouvrir le dialog
             def ouvrir_dialog(dt):
                 try:
                     self.popup.get_screen('modif_prix').ids.prix_init.text = prix_initial
@@ -1112,7 +1124,7 @@ class Screen(MDApp):
                     self.popup.height = '300dp'
                     self.popup.width = '600dp'
                     
-                    # ✅ CORRECTION: Stocker le dialog
+                    # ✅ Stocker le dialog
                     self.dialog = acceuil
                     self.dialog.bind(on_dismiss=self.dismiss_popup)
                     self.dialog.open()
@@ -1209,21 +1221,22 @@ class Screen(MDApp):
                     ("Etat", dp(30)),
                 ]
             )
+            
+            # ✅ Initialiser le paginateur pour les factures
+            self.paginator_facture.set_total_rows(len(row_data))
+            self.paginator_facture.reset()
+
             pagination = self.facture.pagination
 
             btn_prev = pagination.ids.button_back
             btn_next = pagination.ids.button_forward
 
-            self.page = 1
-
             def on_press_page(direction, instance=None):
-                print(direction)
-                max_page = (len(row_data) - 1) // 5 + 1
-                if direction == 'moins' and self.page > 1:
-                    self.page -= 1
-                elif direction == 'plus' and self.page < max_page:
-                    self.page += 1
-                print(self.page)
+                print(f"📄 Facture: {direction} | {self.paginator_facture.debug_info()}")
+                if direction == 'moins':
+                    self.paginator_facture.prev_page()
+                elif direction == 'plus':
+                    self.paginator_facture.next_page()
 
             btn_prev.bind(on_press=partial(on_press_page, 'moins'))
             btn_next.bind(on_press=partial(on_press_page, 'plus'))
@@ -1995,21 +2008,21 @@ class Screen(MDApp):
 
         try:
 
+            # ✅ Initialiser le paginateur
+            self.paginator_contract.set_total_rows(len(row_data))
+            self.paginator_contract.reset()
+
             pagination = self.liste_contrat.pagination
 
             btn_prev = pagination.ids.button_back
             btn_next = pagination.ids.button_forward
 
-            self.main_page = 1
-
             def on_press_page(direction, instance=None):
-                print(direction)
-                max_page = (len(row_data) - 1) // 5 + 1
-                if direction == 'moins' and self.main_page > 1:
-                    self.main_page -= 1
-                elif direction == 'plus' and self.main_page < max_page:
-                    self.main_page += 1
-                print(self.main_page)
+                print(f"📄 Contrat: {direction} | {self.paginator_contract.debug_info()}")
+                if direction == 'moins':
+                    self.paginator_contract.prev_page()
+                elif direction == 'plus':
+                    self.paginator_contract.next_page()
 
             btn_prev.bind(on_press=partial(on_press_page, 'moins'))
             btn_next.bind(on_press=partial(on_press_page, 'plus'))
@@ -2023,8 +2036,10 @@ class Screen(MDApp):
             print(f"Error creating contract table: {e}")
 
     def get_traitement_par_client(self, client_id, table, row):
-        row_num = int(row.index / len(table.column_data))
+        # ✅ Utiliser le paginateur
+        row_num = PaginationHelper.calculate_row_num(row.index, len(table.column_data))
         row_data = table.row_data[row_num]
+        index_global = self.paginator_contract.get_global_index(row_num)
 
         if self.popup.parent:
             self.popup.parent.remove_widget(self.popup)
@@ -2032,7 +2047,6 @@ class Screen(MDApp):
 
         place = self.popup.get_screen('all_treatment').ids.tableau_treat
         place.clear_widgets()
-        index_global = (self.main_page - 1) * 8 + row_num
         row_value = None
 
         if 0 <= index_global < len(table.row_data):
@@ -2110,6 +2124,10 @@ class Screen(MDApp):
                 print(f"❌ Erreur traitement: {e}")
 
             try:
+                # ✅ Initialiser le paginateur pour les traitements
+                self.paginator_treat.set_total_rows(len(row_data))
+                self.paginator_treat.reset()
+
                 self.all_treat.row_data = row_data
 
                 pagination = self.all_treat.pagination
@@ -2117,14 +2135,12 @@ class Screen(MDApp):
                 btn_prev = pagination.ids.button_back
                 btn_next = pagination.ids.button_forward
 
-                self.page = 1
-
                 def on_press_page(direction, instance=None):
-                    max_page = (len(row_data) - 1) // 5 + 1
-                    if direction == 'moins' and self.page > 1:
-                        self.page -= 1
-                    elif direction == 'plus' and self.page < max_page:
-                        self.page += 1
+                    print(f"📄 Traitement: {direction} | {self.paginator_treat.debug_info()}")
+                    if direction == 'moins':
+                        self.paginator_treat.prev_page()
+                    elif direction == 'plus':
+                        self.paginator_treat.next_page()
 
                 btn_prev.bind(on_press=partial(on_press_page, 'moins'))
                 btn_next.bind(on_press=partial(on_press_page, 'plus'))
@@ -2139,14 +2155,15 @@ class Screen(MDApp):
                 print(f'Error creating traitement table: {e}')
 
     def row_pressed_contrat(self, table, row):
-        row_num = int(row.index / len(table.column_data))
-        # ✅ CORRECTION: Calculer index_global en tenant compte de la pagination (4 par page)
-        index_global = (self.page - 1) * 4 + row_num
+        # ✅ Utiliser le paginateur pour les traitements
+        row_num = PaginationHelper.calculate_row_num(row.index, len(table.column_data))
+        index_global = self.paginator_treat.get_global_index(row_num)
         row_value = None
 
-        if 0 <= index_global < len(table.row_data):
+        if self.paginator_treat.is_valid_global_index(index_global):
             row_value = table.row_data[index_global]
 
+        print(f"🔹 row_pressed_contrat: {row_value} | {self.paginator_treat.debug_info()}")
         async def maj_ecran():
             try:
                 self.current_client = await self.database.get_current_contrat(self.client_name,self.reverse_date(row_value[0]), row_value[1])
@@ -2193,26 +2210,27 @@ class Screen(MDApp):
             self.liste_client.parent.remove_widget(self.liste_client)
 
         if client_data:
-            # ✅ CORRECTION: Créer un tuple pour affichage (4 colonnes) ET un mapping client_id
+            # ✅ Créer un tuple pour affichage (4 colonnes) ET un mapping client_id
             row_data = [(i[1], i[2], i[3], self.reverse_date(i[4])) for i in client_data]
             # ✅ Stocker les IDs pour les récupérer dans row_pressed_client
             self.client_id_map = {idx: i[0] for idx, i in enumerate(client_data)}
+            
+            # ✅ Initialiser le paginateur avec le nombre total d'éléments
+            self.paginator_client.set_total_rows(len(row_data))
+            self.paginator_client.reset()
 
             pagination = self.liste_client.pagination
 
             btn_prev = pagination.ids.button_back
             btn_next = pagination.ids.button_forward
 
-            self.main_page = 1
-
             def on_press_page(direction, instance=None):
-                print(direction)
-                max_page = (len(row_data) - 1) // 8 + 1
-                if direction == 'moins' and self.main_page > 1:
-                    self.main_page -= 1
-                elif direction == 'plus' and self.main_page < max_page:
-                    self.main_page += 1
-                print(self.main_page)
+                print(f"📄 Pagination client: {direction} | {self.paginator_client.debug_info()}")
+                if direction == 'moins':
+                    self.paginator_client.prev_page()
+                elif direction == 'plus':
+                    self.paginator_client.next_page()
+                print(self.paginator_client.debug_info())
 
             btn_prev.bind(on_press=partial(on_press_page, 'moins'))
             btn_next.bind(on_press=partial(on_press_page, 'plus'))
@@ -2266,18 +2284,18 @@ class Screen(MDApp):
             print(e)
 
     def row_pressed_client(self, table, row):
-        row_num = int(row.index / len(table.column_data))
-        # ✅ CORRECTION: Calculer index_global en tenant compte de la pagination (8 par page)
-        index_global = (self.main_page - 1) * 8 + row_num
+        # ✅ Utiliser le paginateur pour calculer l'index global
+        row_num = PaginationHelper.calculate_row_num(row.index, len(table.column_data))
+        index_global = self.paginator_client.get_global_index(row_num)
         row_value = None
         client_id = None
 
-        if 0 <= index_global < len(table.row_data):
+        if self.paginator_client.is_valid_global_index(index_global):
             row_value = table.row_data[index_global]
             # ✅ Récupérer client_id du mapping
             client_id = self.client_id_map.get(index_global)
         
-        print(f"🔹 row_pressed_client - client sélectionné: {row_value}, ID: {client_id}")
+        print(f"🔹 row_pressed_client - client sélectionné: {row_value}, ID: {client_id} | {self.paginator_client.debug_info()}")
         
         if not client_id:
             print("❌ Erreur: client_id introuvable")
@@ -2383,21 +2401,21 @@ class Screen(MDApp):
             if self.liste_planning.parent:
                 self.liste_planning.parent.remove_widget(self.liste_planning)
 
+            # ✅ Initialiser le paginateur
+            self.paginator_planning.set_total_rows(len(row_data))
+            self.paginator_planning.reset()
+
             pagination = self.liste_planning.pagination
 
             btn_prev = pagination.ids.button_back
             btn_next = pagination.ids.button_forward
 
-            self.main_page = 1
-
             def on_press_page(direction, instance=None):
-                print(direction)
-                max_page = (len(row_data) - 1) // 5 + 1
-                if direction == 'moins' and self.main_page > 1:
-                    self.main_page -= 1
-                elif direction == 'plus' and self.main_page < max_page:
-                    self.main_page += 1
-                print(self.main_page)
+                print(f"📄 Planning: {direction} | {self.paginator_planning.debug_info()}")
+                if direction == 'moins':
+                    self.paginator_planning.prev_page()
+                elif direction == 'plus':
+                    self.paginator_planning.next_page()
 
             btn_prev.bind(on_press=partial(on_press_page, 'moins'))
             btn_next.bind(on_press=partial(on_press_page, 'plus'))
@@ -2464,16 +2482,16 @@ class Screen(MDApp):
             btn_prev = pagination.ids.button_back
             btn_next = pagination.ids.button_forward
 
-            self.page = 1
+            # ✅ Initialiser le paginateur pour la sélection planning
+            self.paginator_select_planning.set_total_rows(len(row_data))
+            self.paginator_select_planning.reset()
 
             def on_press_page( direction, instance=None):
-                print(direction)
-                max_page = (len(row_data) - 1) // 5 + 1
-                if direction == 'moins' and self.page > 1:
-                    self.page -= 1
-                elif direction == 'plus' and self.page < max_page:
-                    self.page += 1
-                print(self.page)
+                print(f"📄 Select Planning: {direction} | {self.paginator_select_planning.debug_info()}")
+                if direction == 'moins':
+                    self.paginator_select_planning.prev_page()
+                elif direction == 'plus':
+                    self.paginator_select_planning.next_page()
 
             btn_prev.bind(on_press=partial(on_press_page,  'moins'))
             btn_next.bind(on_press=partial(on_press_page,  'plus'))
@@ -2488,19 +2506,18 @@ class Screen(MDApp):
             print(f'Error creating planning_detail table: {e}')
 
     def row_pressed_planning(self, list_id, table, row):
-        row_num = int(row.index / len(table.column_data))
-        row_data = table.row_data[row_num]
+        # ✅ Utiliser le paginateur
+        row_num = PaginationHelper.calculate_row_num(row.index, len(table.column_data))
+        index_global = self.paginator_planning.get_global_index(row_num)
 
         row_value = None
-        index_global = (self.main_page - 1) * 8 + row_num
-
-        if 0 <= index_global < len(table.row_data):
+        if self.paginator_planning.is_valid_global_index(index_global):
             row_value = table.row_data[index_global]
 
         self.fenetre_planning('', 'selection_planning')
-        print(row_value)
-        if row_value :
-            Clock.schedule_once(lambda dt: self.get_and_update(row_value[1], row_value[0], list_id[row_num]), 0)
+        print(f"🔹 row_pressed_planning: {row_value} | {self.paginator_planning.debug_info()}")
+        if row_value:
+            Clock.schedule_once(lambda dt: self.get_and_update(row_value[1], row_value[0], list_id[index_global]), 0)
 
     def get_and_update(self, data1, data2, data3):
         asyncio.run_coroutine_threadsafe(self.planning_par_traitement(data1, data2, data3), self.loop)
@@ -2528,15 +2545,15 @@ class Screen(MDApp):
         Clock.schedule_once(lambda ct: maj_ecran(), 0.5)
 
     def row_pressed_tableau_planning(self, traitement,  table, row):
-        row_num = int(row.index / len(table.column_data))
-        row_data = table.row_data[row_num]
+        # ✅ Utiliser le paginateur pour la sélection planning
+        row_num = PaginationHelper.calculate_row_num(row.index, len(table.column_data))
+        index_global = self.paginator_select_planning.get_global_index(row_num)
+        row_value = None
 
-        index_global = (self.page - 1) * 5 + row_num
-
-        if 0 <= index_global < len(table.row_data):
+        if self.paginator_select_planning.is_valid_global_index(index_global):
             row_value = table.row_data[index_global]
 
-        print(row_value)
+        print(f"🔹 row_pressed_tableau_planning: {row_value} | {self.paginator_select_planning.debug_info()}")
 
         self.dismiss_popup()
         self.fermer_ecran()
@@ -2722,21 +2739,21 @@ class Screen(MDApp):
         if self.historique.parent:
             self.historique.parent.remove_widget(self.historique)
 
+        # ✅ Initialiser le paginateur pour l'historique
+        self.paginator_historic.set_total_rows(len(row_data))
+        self.paginator_historic.reset()
+
         pagination = self.historique.pagination
 
         btn_prev = pagination.ids.button_back
         btn_next = pagination.ids.button_forward
 
-        self.main_page = 1
-
         def on_press_page( direction, instance=None):
-            print(direction)
-            max_page = (len(row_data) - 1) // 5 + 1
-            if direction == 'moins' and self.main_page > 1:
-                self.main_page -= 1
-            elif direction == 'plus' and self.main_page < max_page:
-                self.main_page += 1
-            print(self.main_page)
+            print(f"📄 Historique: {direction} | {self.paginator_historic.debug_info()}")
+            if direction == 'moins':
+                self.paginator_historic.prev_page()
+            elif direction == 'plus':
+                self.paginator_historic.next_page()
 
         btn_prev.bind(on_press=partial(on_press_page,  'moins'))
         btn_next.bind(on_press=partial(on_press_page,  'plus'))
@@ -2747,17 +2764,20 @@ class Screen(MDApp):
         place.add_widget(self.historique)
 
     def row_pressed_histo(self, table, row, planning_id):
-        row_num = int(row.index / len(table.column_data))
-        row_data = table.row_data
-        index_global = (self.main_page - 1) * 5 + row_num
+        # ✅ Utiliser le paginateur pour l'historique
+        row_num = PaginationHelper.calculate_row_num(row.index, len(table.column_data))
+        index_global = self.paginator_historic.get_global_index(row_num)
+        row_value = None
 
-        if 0 <= index_global < len(table.row_data):
+        if self.paginator_historic.is_valid_global_index(index_global):
             row_value = table.row_data[index_global]
+
+        print(f"🔹 row_pressed_histo: {row_value} | {self.paginator_historic.debug_info()}")
 
         if row_value[0] == 'Aucun':
             return
 
-        # ✅ CORRECTION: Vérifier que row_num est dans les limites et que planning_id n'est pas None
+        # ✅ CORRECTION: Vérifier que index_global est valide et que planning_id n'est pas None
         if not isinstance(planning_id, list):
             print(f"❌ Erreur: planning_id n'est pas une liste: {type(planning_id)}")
             Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Erreur: Historique non disponible'), 0)
