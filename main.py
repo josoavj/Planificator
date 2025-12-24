@@ -1800,17 +1800,21 @@ class Screen(MDApp):
         self.root.get_screen('Sidebar').ids['gestion_ecran'].current =  'about'
 
     def switch_to_main(self):
-        # ✅ LAZY LOADING: Initialiser les tables à la demande
+        # ✅ ÉTAPE 1 - Charger Sidebar.kv si pas encore chargé (essentiel pour gestion_ecran)
+        if not self._main_screens_loaded:
+            self._load_main_screens_async()
+        
+        # ✅ ÉTAPE 2 - Lazy load tables à la demande
         if not self._tables_initialized:
             self._initialize_tables()
         
-        # Initialiser les écrans une seule fois après authentification
+        # ✅ ÉTAPE 3 - Initialiser les écrans une seule fois après authentification
         if not self._screens_initialized:
             gestion_ecran(self.root)
             self._screens_initialized = True
             asyncio.run_coroutine_threadsafe(self.populate_tables(), self.loop)
         
-        # ✅ ÉTAPE 2 - Optimisation: Charger les écrans popup additionnels après login
+        # ✅ ÉTAPE 4 - Charger les écrans popup additionnels après login
         if not self._popup_full_loaded:
             self._load_additional_popup_screens()
         
@@ -1830,23 +1834,21 @@ class Screen(MDApp):
         print("✅ Écrans popup additionnels chargés après login")
 
     def _load_main_screens_async(self):
-        """Charger main.kv et Sidebar.kv de manière asynchrone après le login"""
+        """Charger Sidebar.kv après le login (main.kv déjà chargé au startup)"""
         if self._main_screens_loaded:
             return  # Évite les doublons
         
         try:
             from kivy.lang import Builder
             
-            # Charger les screens asynchronously
-            main_screen = Builder.load_file('screen/main.kv')
+            # Charger Sidebar.kv (main.kv est déjà chargé au startup)
             sidebar_screen = Builder.load_file('screen/Sidebar.kv')
             
-            # Les ajouter au ScreenManager
-            self.root.add_widget(main_screen)
+            # L'ajouter au ScreenManager
             self.root.add_widget(sidebar_screen)
             
             self._main_screens_loaded = True
-            print("✅ Screens main.kv et Sidebar.kv chargés asynchronement")
+            print("✅ Sidebar.kv chargé après login")
         except Exception as e:
             print(f"❌ Erreur lors du chargement asynchrone: {e}")
 
@@ -2499,50 +2501,69 @@ class Screen(MDApp):
                 print(f"📅 Date contrat trouvée: {contrat_date}")
                 if not contrat_date:
                     print(f"⚠️ Aucun contrat trouvé pour client_id {cid}")
-                    return
+                    return False
                 # Étape 2: Récupérer les infos complètes du client avec cette date
                 print(f"📥 Charger infos client pour client_id: {cid}, date: {contrat_date}")
                 self.current_client = await self.database.get_current_client(cid, contrat_date)
                 print(f"✅ current_client chargé: {self.current_client is not None}")
                 if self.current_client:
                     print(f"   Nom: {self.current_client[1]} {self.current_client[2]}")
+                    return True
+                return False
             except Exception as e:
                 print(f"❌ Erreur row_pressed_client: {e}")
                 import traceback
                 traceback.print_exc()
+                return False
 
-        asyncio.run_coroutine_threadsafe(current_client_info_async(client_id), self.loop)
-
-        def maj_ecran():
+        def maj_ecran_after_load():
+            """Affiche UI seulement quand current_client est prêt"""
             print(f"🎨 maj_ecran - current_client: {self.current_client is not None}")
             if not self.current_client:
                 print("⚠️ current_client est None! Aucun contrat trouvé pour ce client")
-                Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Aucun contrat trouvé pour ce client'), 0)
-                Clock.schedule_once(lambda dt: self.dismiss_popup(), 0.5)
+                self.show_dialog('Erreur', f'Aucun contrat trouvé pour ce client')
+                self.dismiss_popup()
                 return
+            
+            print(f"✨ Affichage des infos client")
+            if self.current_client[3] == 'Particulier':
+                nom = self.current_client[1] + ' ' + self.current_client[2]
             else:
-                print(f"✨ Affichage des infos client")
-                if self.current_client[3] == 'Particulier':
-                    nom = self.current_client[1] + ' ' + self.current_client[2]
-                else:
-                    nom = self.current_client[1]
+                nom = self.current_client[1]
 
-                if self.current_client[6] == 'Indéterminée':
-                    fin = self.reverse_date(self.current_client[8])
-                else :
-                    fin = self.current_client[8]
+            if self.current_client[6] == 'Indéterminée':
+                fin = self.reverse_date(self.current_client[8])
+            else:
+                fin = self.current_client[8]
 
-                self.popup.get_screen('option_client').ids.titre.text = f'A propos de {nom}'
-                self.popup.get_screen('option_client').ids.date_contrat.text = f'Contrat du : {self.reverse_date(self.current_client[4])}'
-                self.popup.get_screen('option_client').ids.debut_contrat.text = f'Début du contrat : {self.reverse_date(self.current_client[7])}'
-                self.popup.get_screen('option_client').ids.fin_contrat.text = f'Fin du contrat : {fin}'
-                self.popup.get_screen('option_client').ids.type_traitement.text = f'Type de traitement : {self.current_client[5]}'
-                self.popup.get_screen('option_client').ids.duree.text = f'Durée du contrat : {self.current_client[6]}'
+            self.popup.get_screen('option_client').ids.titre.text = f'A propos de {nom}'
+            self.popup.get_screen('option_client').ids.date_contrat.text = f'Contrat du : {self.reverse_date(self.current_client[4])}'
+            self.popup.get_screen('option_client').ids.debut_contrat.text = f'Début du contrat : {self.reverse_date(self.current_client[7])}'
+            self.popup.get_screen('option_client').ids.fin_contrat.text = f'Fin du contrat : {fin}'
+            self.popup.get_screen('option_client').ids.type_traitement.text = f'Type de traitement : {self.current_client[5]}'
+            self.popup.get_screen('option_client').ids.duree.text = f'Durée du contrat : {self.current_client[6]}'
 
-        # ⏱️ TIMING FIX: Ouvrir fenêtre après 0.1s (laisser async commencer)
-        # Afficher infos après 1.0s (laisser requête terminer)
-        Clock.schedule_once(lambda x: self.fenetre_client('', 'option_client'), 0.1)
-        Clock.schedule_once(lambda x: maj_ecran(), 1.0)
+        # ✅ Ouvrir fenêtre immédiatement
+        self.fenetre_client('', 'option_client')
+        
+        # ✅ Charger données et afficher quand prêt
+        def wait_and_update():
+            """Attend que async soit prêt, puis affiche"""
+            # Attendre max 3s avec polling
+            for attempt in range(30):  # 3s max (30 x 0.1s)
+                if self.current_client is not None:
+                    maj_ecran_after_load()
+                    return
+                Clock.schedule_once(lambda dt, a=attempt: None, 0.1)
+            # Timeout
+            print("⏱️ Timeout: current_client toujours None après 3s")
+            maj_ecran_after_load()
+        
+        # Lancer async fetch
+        asyncio.run_coroutine_threadsafe(current_client_info_async(client_id), self.loop)
+        
+        # Attendre et afficher après 0.2s (laisser async démarrer)
+        Clock.schedule_once(lambda dt: wait_and_update(), 0.2)
 
     @mainthread
     def tableau_planning(self, place, result, dt=None):
@@ -2706,13 +2727,24 @@ class Screen(MDApp):
         index_global = self.paginator_planning.get_global_index(row_num)
 
         row_value = None
+        planning_id = None
+        
         if self.paginator_planning.is_valid_global_index(index_global):
             row_value = table.row_data[index_global]
+            # ✅ Vérifier que list_id a assez d'éléments
+            if index_global < len(list_id):
+                planning_id = list_id[index_global]
 
+        print(f"🔹 row_pressed_planning: {row_value}, planning_id: {planning_id} | {self.paginator_planning.debug_info()}")
+        
+        if not row_value or not planning_id:
+            print("❌ Erreur: données invalides pour planning")
+            self.show_dialog('Erreur', 'Impossible de récupérer les données du planning')
+            return
+            
         self.fenetre_planning('', 'selection_planning')
-        print(f"🔹 row_pressed_planning: {row_value} | {self.paginator_planning.debug_info()}")
-        if row_value:
-            Clock.schedule_once(lambda dt: self.get_and_update(row_value[1], row_value[0], list_id[index_global]), 0)
+        # ✅ Utiliser Clock.schedule avec délai court pour laisser la fenêtre s'ouvrir
+        Clock.schedule_once(lambda dt: self.get_and_update(row_value[1], row_value[0], planning_id), 0.1)
 
     def get_and_update(self, data1, data2, data3):
         asyncio.run_coroutine_threadsafe(self.planning_par_traitement(data1, data2, data3), self.loop)
