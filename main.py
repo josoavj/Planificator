@@ -63,6 +63,23 @@ class Screen(MDApp):
         asyncio.run_coroutine_threadsafe(self.database.connect(), self.loop)
         self._screens_initialized = False  # Flag pour éviter d'initialiser 2x
 
+    def _display_table_with_delay(self, place, table, delay=0.5):
+        """
+        Affiche un tableau avec un petit délai pour que le contenu se charge bien.
+        
+        Args:
+            place: Le widget conteneur (BoxLayout)
+            table: Le tableau à afficher (MDDataTable)
+            delay: Délai avant affichage en secondes (défaut: 0.5s)
+        """
+        def add_table():
+            if place and table:
+                place.clear_widgets()
+                place.add_widget(table)
+                print(f"✅ Tableau ajouté après {delay}s")
+        
+        Clock.schedule_once(lambda dt: add_table(), delay)
+
     def on_start(self):
         # Ne rien appeler ici - attendre la connexion réussie
         pass
@@ -1080,7 +1097,17 @@ class Screen(MDApp):
     def screen_modifier_prix(self, table, row):
         # ✅ Utiliser le paginateur pour les factures
         try:
-            row_num = PaginationHelper.calculate_row_num(row.index, len(table.column_data))
+            # ✅ Déterminer quelle colonne a été cliquée
+            num_columns = len(table.column_data)
+            row_num = PaginationHelper.calculate_row_num(row.index, num_columns)
+            column_num = row.index % num_columns  # 0=Date, 1=Montant, 2=Etat
+            
+            print(f"🔹 Clic: row_num={row_num}, column={column_num} (colonne '{table.column_data[column_num][0]}')")
+            
+            # ✅ Permettre le clic sur n'importe quelle colonne (pas seulement le Montant)
+            # Les trois colonnes sont: Date, Montant, Etat
+            # On peut cliquer sur n'importe laquelle pour modifier le prix
+            
             index_global = self.paginator_facture.get_global_index(row_num)
             
             # ✅ Vérifier que l'index est valide
@@ -1099,7 +1126,7 @@ class Screen(MDApp):
             self.date = self.reverse_date(row_value[0])
             prix_initial = row_value[1]
             
-            print(f"🔹 screen_modifier_prix: {row_value} | {self.paginator_facture.debug_info()}")
+            print(f"✅ Modification prix pour: {row_value[0]} (Prix: {prix_initial})")
             
             # ✅ Attendre un peu puis ouvrir le dialog
             def ouvrir_dialog(dt):
@@ -1245,8 +1272,13 @@ class Screen(MDApp):
                 self.facture.row_data = row_data
 
             self.facture.bind(on_row_press=lambda instance, row: self.screen_modifier_prix(instance, row))
-            Clock.schedule_once(lambda dt: _(), 0)
-            place.add_widget(self.facture)
+            
+            # ✅ Afficher avec délai pour que les données se chargent bien
+            def set_and_display():
+                self.facture.row_data = row_data
+                self._display_table_with_delay(place, self.facture, delay=0.3)
+            
+            Clock.schedule_once(lambda dt: set_and_display(), 0)
 
     def fenetre_acceuil(self, titre, ecran, client, date,type_traitement, durée, debut_contrat, fin_prévu):
         from kivymd.uix.dialog import MDDialog
@@ -2029,8 +2061,9 @@ class Screen(MDApp):
 
             self.liste_contrat.row_data = row_data
             self.liste_contrat.bind(on_row_press=partial(self.get_traitement_par_client, client_id))
-            if contract_data:
-                place.add_widget(self.liste_contrat)
+            
+            # ✅ Afficher avec délai
+            self._display_table_with_delay(place, self.liste_contrat, delay=0.3)
 
         except Exception as e:
             print(f"Error creating contract table: {e}")
@@ -2147,9 +2180,12 @@ class Screen(MDApp):
 
                 self.all_treat.bind(on_row_press=self.row_pressed_contrat)
 
-                if self.all_treat.parent:
-                    self.all_treat.parent.remove_widget(self.all_treat)
-                place.add_widget(self.all_treat)
+                # ✅ Afficher avec délai
+                def set_and_display():
+                    self.all_treat.row_data = row_data
+                    self._display_table_with_delay(place, self.all_treat, delay=0.3)
+                
+                Clock.schedule_once(lambda dt: set_and_display(), 0)
 
             except Exception as e:
                 print(f'Error creating traitement table: {e}')
@@ -2237,8 +2273,9 @@ class Screen(MDApp):
 
             self.liste_client.row_data = row_data
             self.liste_client.bind(on_row_press=self.row_pressed_client)
-            place.clear_widgets()
-            place.add_widget(self.liste_client)
+            
+            # ✅ Afficher avec délai pour que le contenu se charge bien
+            self._display_table_with_delay(place, self.liste_client, delay=0.3)
 
     def historique_par_client(self, source):
         self.fermer_ecran()
@@ -2423,7 +2460,8 @@ class Screen(MDApp):
 
             self.liste_planning.bind(on_row_press= partial(self.row_pressed_planning, liste_id))
 
-            place.add_widget(self.liste_planning)
+            # ✅ Afficher avec délai
+            self._display_table_with_delay(place, self.liste_planning, delay=0.3)
             #del self.liste_planning
         except Exception as e:
             print(f"Error creating planning table: {e}")
@@ -2498,8 +2536,14 @@ class Screen(MDApp):
 
             self.liste_select_planning.bind(
                 on_row_press=lambda instance, row: self.row_pressed_tableau_planning(traitement, instance, row))
+            
+            # ✅ Afficher avec délai
+            def set_and_display():
+                self.liste_select_planning.row_data = row_data
+                self._display_table_with_delay(place, self.liste_select_planning, delay=0.3)
+            
             place.add_widget(self.liste_select_planning)
-            Clock.schedule_once(lambda dt :_(),0)
+            Clock.schedule_once(lambda dt :set_and_display(),0)
 
 
         except Exception as e:
@@ -2758,10 +2802,9 @@ class Screen(MDApp):
         btn_prev.bind(on_press=partial(on_press_page,  'moins'))
         btn_next.bind(on_press=partial(on_press_page,  'plus'))
 
-        self.historique.row_data = row_data
-        # ✅ CORRECTION: Utiliser partial pour capturer planning_id correctement
+        # ✅ Afficher avec délai
         self.historique.bind(on_row_press=partial(self.row_pressed_histo, planning_id=planning_id))
-        place.add_widget(self.historique)
+        self._display_table_with_delay(place, self.historique, delay=0.3)
 
     def row_pressed_histo(self, table, row, planning_id):
         # ✅ Utiliser le paginateur pour l'historique
@@ -2867,11 +2910,13 @@ class Screen(MDApp):
                     ("Action", dp(30)),
                 ]
             )
-            def _():
+            
+            # ✅ Afficher avec délai
+            def set_and_display():
                 self.remarque_historique.row_data = row_data
-
-            place.add_widget(self.remarque_historique)
-            Clock.schedule_once(lambda dt: _(), 0.1)
+                self._display_table_with_delay(place, self.remarque_historique, delay=0.3)
+            
+            Clock.schedule_once(lambda dt: set_and_display(), 0.1)
 
         except Exception as e:
             print(f'Erreur lors de la création du tableau des remarques historiques : {e}')
