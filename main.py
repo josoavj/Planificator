@@ -30,7 +30,6 @@ from kivymd.toast import toast
 
 from gestion_ecran import gestion_ecran, popup
 from excel import generate_comprehensive_facture_excel, generer_facture_excel, generate_traitements_excel
-from pagination_manager import TablePaginator, PaginationHelper
 
 
 class MyDatatable(MDDataTable):
@@ -98,15 +97,6 @@ class Screen(MDApp):
         self.card = None
         self.dialog = None
 
-        # ✅ NOUVELLES: Paginateurs centralisés pour chaque tableau
-        self.paginator_contract = TablePaginator(rows_per_page=8)
-        self.paginator_client = TablePaginator(rows_per_page=8)
-        self.paginator_planning = TablePaginator(rows_per_page=8)
-        self.paginator_historic = TablePaginator(rows_per_page=8)
-        self.paginator_treat = TablePaginator(rows_per_page=4)
-        self.paginator_facture = TablePaginator(rows_per_page=5)
-        self.paginator_select_planning = TablePaginator(rows_per_page=5)
-
         # ✅ LAZY LOADING: Tables créées à la demande au lieu du build()
         self.table_en_cours = None
         self.table_prevision = None
@@ -119,6 +109,12 @@ class Screen(MDApp):
         self.account = None
         self._tables_initialized = False
         self._popup_full_loaded = False
+
+        # ✅ RESTAURÉ: Variables simples pour pagination (ancien système)
+        self.main_page_contract = 1
+        self.main_page_client = 1
+        self.main_page_planning = 1
+        self.main_page_historic = 1
 
         self.popup = ScreenManager(size_hint=( None, None))
         popup(self.popup, init_only=True)  # ✅ Charger seulement les essentiels au démarrage
@@ -2416,7 +2412,6 @@ class Screen(MDApp):
 
         if self.liste_client.parent:
             self.liste_client.parent.remove_widget(self.liste_client)
-
         if client_data:
             # ✅ Créer un tuple pour affichage (4 colonnes) ET un mapping index_global -> client_id
             row_data = [(i[1], i[2], i[3], self.reverse_date(i[4])) for i in client_data]
@@ -2426,10 +2421,6 @@ class Screen(MDApp):
             
             print(f"📊 client_id_map créé: {len(self.client_id_map)} clients")
             print(f"   Premiers IDs: {dict(list(self.client_id_map.items())[:3])}")
-            
-            # ✅ Initialiser le paginateur avec le nombre total d'éléments
-            self.paginator_client.set_total_rows(len(row_data))
-            self.paginator_client.reset()
 
             pagination = self.liste_client.pagination
 
@@ -2437,12 +2428,13 @@ class Screen(MDApp):
             btn_next = pagination.ids.button_forward
 
             def on_press_page(direction, instance=None):
-                print(f"📄 Pagination client: {direction} | {self.paginator_client.debug_info()}")
-                if direction == 'moins':
-                    self.paginator_client.prev_page()
-                elif direction == 'plus':
-                    self.paginator_client.next_page()
-                print(self.paginator_client.debug_info())
+                print(f"📄 Pagination client: {direction} | page avant: {self.main_page_client}")
+                max_page = (len(row_data) - 1) // 8 + 1
+                if direction == 'moins' and self.main_page_client > 1:
+                    self.main_page_client -= 1
+                elif direction == 'plus' and self.main_page_client < max_page:
+                    self.main_page_client += 1
+                print(f"   page après: {self.main_page_client}")
 
             btn_prev.bind(on_press=partial(on_press_page, 'moins'))
             btn_next.bind(on_press=partial(on_press_page, 'plus'))
@@ -2503,96 +2495,53 @@ class Screen(MDApp):
             print(e)
 
     def row_pressed_client(self, table, row):
-        # ✅ Utiliser le paginateur pour calculer l'index global
-        row_num = PaginationHelper.calculate_row_num(row.index, len(table.column_data))
-        index_global = self.paginator_client.get_global_index(row_num)
+        # ✅ RESTAURÉ: Calcul simple de l'index global (ancien système)
+        row_num = int(row.index / len(table.column_data))
+        index_global = (self.main_page_client - 1) * 8 + row_num
         row_value = None
         client_id = None
 
-        if self.paginator_client.is_valid_global_index(index_global):
+        if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
             # ✅ Récupérer client_id du mapping
             client_id = self.client_id_map.get(index_global)
         
-        print(f"🔹 row_pressed_client - client sélectionné: {row_value}, ID: {client_id} | {self.paginator_client.debug_info()}")
+        print(f"🔹 row_pressed_client - page={self.main_page_client}, row_num={row_num}, index_global={index_global}")
+        print(f"   client: {row_value}, client_id: {client_id}")
         
         if not client_id:
             print("❌ Erreur: client_id introuvable")
-            self.show_dialog('Erreur', 'Impossible de récupérer l\'ID du client')
+            toast('Impossible de récupérer l\'ID du client')
             return
         
-        # ✅ Récupérer la date du contrat du client d'abord
-        async def current_client_info_async(cid):
-            try:
-                # Étape 1: Récupérer la date du contrat actif/récent par CLIENT_ID
-                print(f"🔍 Cherche contrat pour client_id: {cid}")
-                contrat_date = await self.database.get_latest_contract_date_for_client(cid)
-                print(f"📅 Date contrat trouvée: {contrat_date}")
-                if not contrat_date:
-                    print(f"⚠️ Aucun contrat trouvé pour client_id {cid}")
-                    return False
-                # Étape 2: Récupérer les infos complètes du client avec cette date
-                print(f"📥 Charger infos client pour client_id: {cid}, date: {contrat_date}")
-                self.current_client = await self.database.get_current_client(cid, contrat_date)
-                print(f"✅ current_client chargé: {self.current_client is not None}")
-                if self.current_client:
-                    print(f"   Nom: {self.current_client[1]} {self.current_client[2]}")
-                    return True
-                return False
-            except Exception as e:
-                print(f"❌ Erreur row_pressed_client: {e}")
-                import traceback
-                traceback.print_exc()
-                return False
+        # ✅ Récupérer l'info du client par son ID et afficher
+        asyncio.run_coroutine_threadsafe(self.current_client_info(row_value[0], row_value[3]), self.loop)
 
-        def maj_ecran_after_load():
-            """Affiche UI seulement quand current_client est prêt"""
-            print(f"🎨 maj_ecran - current_client: {self.current_client is not None}")
+        def maj_ecran():
             if not self.current_client:
-                print("⚠️ current_client est None! Aucun contrat trouvé pour ce client")
-                self.show_dialog('Erreur', f'Aucun contrat trouvé pour ce client')
-                self.dismiss_popup()
+                toast('Veuillez réessayer dans quelques secondes')
                 return
-            
-            print(f"✨ Affichage des infos client")
-            if self.current_client[3] == 'Particulier':
-                nom = self.current_client[1] + ' ' + self.current_client[2]
             else:
-                nom = self.current_client[1]
+                if self.current_client[3] == 'Particulier':
+                    nom = self.current_client[1] + ' ' + self.current_client[2]
+                else:
+                    nom = self.current_client[1]
 
-            if self.current_client[6] == 'Indéterminée':
-                fin = self.reverse_date(self.current_client[8])
-            else:
-                fin = self.current_client[8]
+                if self.current_client[6] == 'Indéterminée':
+                    fin = self.reverse_date(self.current_client[8])
+                else:
+                    fin = self.current_client[8]
 
-            self.popup.get_screen('option_client').ids.titre.text = f'A propos de {nom}'
-            self.popup.get_screen('option_client').ids.date_contrat.text = f'Contrat du : {self.reverse_date(self.current_client[4])}'
-            self.popup.get_screen('option_client').ids.debut_contrat.text = f'Début du contrat : {self.reverse_date(self.current_client[7])}'
-            self.popup.get_screen('option_client').ids.fin_contrat.text = f'Fin du contrat : {fin}'
-            self.popup.get_screen('option_client').ids.type_traitement.text = f'Type de traitement : {self.current_client[5]}'
-            self.popup.get_screen('option_client').ids.duree.text = f'Durée du contrat : {self.current_client[6]}'
+                self.popup.get_screen('option_client').ids.titre.text = f'A propos de {nom}'
+                self.popup.get_screen('option_client').ids.date_contrat.text = f'Contrat du : {self.reverse_date(self.current_client[4])}'
+                self.popup.get_screen('option_client').ids.debut_contrat.text = f'Début du contrat : {self.reverse_date(self.current_client[7])}'
+                self.popup.get_screen('option_client').ids.fin_contrat.text = f'Fin du contrat : {fin}'
+                self.popup.get_screen('option_client').ids.type_traitement.text = f'Type de traitement : {self.current_client[5]}'
+                self.popup.get_screen('option_client').ids.duree.text = f'Durée du contrat : {self.current_client[6]}'
 
-        # ✅ Ouvrir fenêtre immédiatement
-        self.fenetre_client('', 'option_client')
-        
-        # ✅ Charger données et afficher quand prêt
-        def wait_and_update():
-            """Attend que async soit prêt, puis affiche"""
-            # Attendre max 3s avec polling
-            for attempt in range(30):  # 3s max (30 x 0.1s)
-                if self.current_client is not None:
-                    maj_ecran_after_load()
-                    return
-                Clock.schedule_once(lambda dt, a=attempt: None, 0.1)
-            # Timeout
-            print("⏱️ Timeout: current_client toujours None après 3s")
-            maj_ecran_after_load()
-        
-        # Lancer async fetch
-        asyncio.run_coroutine_threadsafe(current_client_info_async(client_id), self.loop)
-        
-        # Attendre et afficher après 0.2s (laisser async démarrer)
-        Clock.schedule_once(lambda dt: wait_and_update(), 0.2)
+        Clock.schedule_once(lambda x: self.fenetre_client('', 'option_client'))
+        Clock.schedule_once(lambda x: maj_ecran(), 0.3)
+
 
     @mainthread
     def tableau_planning(self, place, result, dt=None):
@@ -2639,27 +2588,25 @@ class Screen(MDApp):
             if self.liste_planning.parent:
                 self.liste_planning.parent.remove_widget(self.liste_planning)
 
-            # ✅ Initialiser le paginateur
-            self.paginator_planning.set_total_rows(len(row_data))
-            self.paginator_planning.reset()
-
             pagination = self.liste_planning.pagination
 
             btn_prev = pagination.ids.button_back
             btn_next = pagination.ids.button_forward
 
             def on_press_page(direction, instance=None):
-                print(f"📄 Planning: {direction} | {self.paginator_planning.debug_info()}")
-                if direction == 'moins':
-                    self.paginator_planning.prev_page()
-                elif direction == 'plus':
-                    self.paginator_planning.next_page()
+                print(f"📄 Pagination planning: {direction} | page avant: {self.main_page_planning}")
+                max_page = (len(row_data) - 1) // 8 + 1
+                if direction == 'moins' and self.main_page_planning > 1:
+                    self.main_page_planning -= 1
+                elif direction == 'plus' and self.main_page_planning < max_page:
+                    self.main_page_planning += 1
+                print(f"   page après: {self.main_page_planning}")
 
             btn_prev.bind(on_press=partial(on_press_page, 'moins'))
             btn_next.bind(on_press=partial(on_press_page, 'plus'))
             self.liste_planning.row_data = row_data
 
-            self.liste_planning.bind(on_row_press= partial(self.row_pressed_planning, liste_id))
+            self.liste_planning.bind(on_row_press=partial(self.row_pressed_planning, liste_id))
 
             # ✅ Afficher avec délai
             self._display_table_with_delay(place, self.liste_planning, delay=0.3)
@@ -2751,24 +2698,25 @@ class Screen(MDApp):
             print(f'Error creating planning_detail table: {e}')
 
     def row_pressed_planning(self, list_id, table, row):
-        # ✅ Utiliser le paginateur
-        row_num = PaginationHelper.calculate_row_num(row.index, len(table.column_data))
-        index_global = self.paginator_planning.get_global_index(row_num)
+        # ✅ RESTAURÉ: Calcul simple de l'index global
+        row_num = int(row.index / len(table.column_data))
+        index_global = (self.main_page_planning - 1) * 8 + row_num
 
         row_value = None
         planning_id = None
         
-        if self.paginator_planning.is_valid_global_index(index_global):
+        if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
             # ✅ Vérifier que list_id a assez d'éléments
             if index_global < len(list_id):
                 planning_id = list_id[index_global]
 
-        print(f"🔹 row_pressed_planning: {row_value}, planning_id: {planning_id} | {self.paginator_planning.debug_info()}")
+        print(f"🔹 row_pressed_planning - page={self.main_page_planning}, row_num={row_num}")
+        print(f"   index_global={index_global}, row_value={row_value}, planning_id={planning_id}")
         
         if not row_value or not planning_id:
             print("❌ Erreur: données invalides pour planning")
-            self.show_dialog('Erreur', 'Impossible de récupérer les données du planning')
+            toast('Impossible de récupérer les données du planning')
             return
             
         self.fenetre_planning('', 'selection_planning')
@@ -2801,22 +2749,27 @@ class Screen(MDApp):
         Clock.schedule_once(lambda ct: maj_ecran(), 0.5)
 
     def row_pressed_tableau_planning(self, traitement,  table, row):
-        # ✅ Utiliser le paginateur pour la sélection planning
-        row_num = PaginationHelper.calculate_row_num(row.index, len(table.column_data))
-        index_global = self.paginator_select_planning.get_global_index(row_num)
+        # ✅ RESTAURÉ: Calcul simple de l'index global
+        row_num = int(row.index / len(table.column_data))
+        # Note: Pour this tableau, page est self.page (voir tableau_selection_planning)
+        index_global = (self.page - 1) * 5 + row_num
         row_value = None
 
-        if self.paginator_select_planning.is_valid_global_index(index_global):
+        if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
 
-        print(f"🔹 row_pressed_tableau_planning: {row_value} | {self.paginator_select_planning.debug_info()}")
+        print(f"🔹 row_pressed_tableau_planning - page={self.page}, row_num={row_num}")
+        print(f"   index_global={index_global}, row_value={row_value}")
 
         self.dismiss_popup()
         self.fermer_ecran()
 
         async def get():
-            self.planning_detail = await self.database.get_info_planning(traitement, self.reverse_date(row_value[0]))
-            print(self.planning_detail, type(self.planning_detail))
+            if row_value:
+                self.planning_detail = await self.database.get_info_planning(traitement, self.reverse_date(row_value[0]))
+                print(self.planning_detail, type(self.planning_detail))
+            else:
+                print("⚠️ row_value est None, impossible de charger planning_detail")
 
         asyncio.run_coroutine_threadsafe(get(), self.loop)
 
@@ -2995,57 +2948,55 @@ class Screen(MDApp):
         if self.historique.parent:
             self.historique.parent.remove_widget(self.historique)
 
-        # ✅ Initialiser le paginateur pour l'historique
-        self.paginator_historic.set_total_rows(len(row_data))
-        self.paginator_historic.reset()
-
         pagination = self.historique.pagination
 
         btn_prev = pagination.ids.button_back
         btn_next = pagination.ids.button_forward
 
-        def on_press_page( direction, instance=None):
-            print(f"📄 Historique: {direction} | {self.paginator_historic.debug_info()}")
-            if direction == 'moins':
-                self.paginator_historic.prev_page()
-            elif direction == 'plus':
-                self.paginator_historic.next_page()
+        def on_press_page(direction, instance=None):
+            print(f"📄 Pagination historique: {direction} | page avant: {self.main_page_historic}")
+            max_page = (len(row_data) - 1) // 8 + 1
+            if direction == 'moins' and self.main_page_historic > 1:
+                self.main_page_historic -= 1
+            elif direction == 'plus' and self.main_page_historic < max_page:
+                self.main_page_historic += 1
+            print(f"   page après: {self.main_page_historic}")
 
-        btn_prev.bind(on_press=partial(on_press_page,  'moins'))
-        btn_next.bind(on_press=partial(on_press_page,  'plus'))
+        btn_prev.bind(on_press=partial(on_press_page, 'moins'))
+        btn_next.bind(on_press=partial(on_press_page, 'plus'))
 
         # ✅ Afficher avec délai
         self.historique.bind(on_row_press=partial(self.row_pressed_histo, planning_id=planning_id))
         self._display_table_with_delay(place, self.historique, delay=0.3)
 
     def row_pressed_histo(self, table, row, planning_id):
-        # ✅ Utiliser le paginateur pour l'historique
-        row_num = PaginationHelper.calculate_row_num(row.index, len(table.column_data))
-        index_global = self.paginator_historic.get_global_index(row_num)
+        # ✅ RESTAURÉ: Calcul simple de l'index global
+        row_num = int(row.index / len(table.column_data))
+        index_global = (self.main_page_historic - 1) * 8 + row_num
         row_value = None
 
-        if self.paginator_historic.is_valid_global_index(index_global):
+        if 0 <= index_global < len(table.row_data):
             row_value = table.row_data[index_global]
+        print(f"🔹 row_pressed_histo - page={self.main_page_historic}, row_num={row_num}")
+        print(f"   index_global={index_global}, row_value={row_value}")
 
-        print(f"🔹 row_pressed_histo: {row_value} | {self.paginator_historic.debug_info()}")
-
-        if row_value[0] == 'Aucun':
+        if row_value and row_value[0] == 'Aucun':
             return
 
-        # ✅ CORRECTION: Vérifier que index_global est valide et que planning_id n'est pas None
+        # ✅ Vérifier que planning_id est valide et index_global est dans les limites
         if not isinstance(planning_id, list):
             print(f"❌ Erreur: planning_id n'est pas une liste: {type(planning_id)}")
-            Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Erreur: Historique non disponible'), 0)
+            toast('Erreur: Historique non disponible')
             return
         
-        if row_num >= len(planning_id):
-            print(f"❌ Erreur: row_num={row_num} hors limites de planning_id (len={len(planning_id)})")
-            Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Erreur: Historique non disponible'), 0)
+        if index_global >= len(planning_id):
+            print(f"❌ Erreur: index_global={index_global} hors limites de planning_id (len={len(planning_id)})")
+            toast('Erreur: Historique non disponible')
             return
         
-        if planning_id[row_num] is None:
-            print(f"❌ Erreur: planning_id[{row_num}] est None")
-            Clock.schedule_once(lambda dt: self.show_dialog('Erreur', 'Erreur: Cet historique n\'a pas de planning associé'), 0)
+        if planning_id[index_global] is None:
+            print(f"❌ Erreur: planning_id[{index_global}] est None")
+            toast('Erreur: Cet historique n\'a pas de planning associé')
             return
 
         place = self.popup.get_screen('histo_remarque').ids.tableau_rem_histo
@@ -3053,7 +3004,7 @@ class Screen(MDApp):
         self.fenetre_histo('', 'histo_remarque')
 
         def get_data():
-            asyncio.run_coroutine_threadsafe(self.historique_remarque(place, planning_id[row_num]), self.loop)
+            asyncio.run_coroutine_threadsafe(self.historique_remarque(place, planning_id[index_global]), self.loop)
 
         Clock.schedule_once(lambda c: self.loading_spinner(self.popup, 'histo_remarque'), 0)
         Clock.schedule_once(lambda c: get_data(), 0)
