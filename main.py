@@ -1128,19 +1128,20 @@ class Screen(MDApp):
             
             print(f"✅ Modification prix pour: {row_value[0]} (Prix: {prix_initial})")
             
-            # ✅ Attendre un peu puis ouvrir le dialog
-            def ouvrir_dialog(dt):
+            # ✅ Afficher d'abord la fenêtre de confirmation
+            def ouvrir_confirmation(dt):
                 try:
-                    self.popup.get_screen('modif_prix').ids.prix_init.text = prix_initial
-                    self.popup.get_screen('modif_prix').ids.new_price.text = ''
+                    # ✅ Remplir les champs de confirmation
+                    self.popup.get_screen('confirm_prix').ids.date_value.text = self.date
+                    self.popup.get_screen('confirm_prix').ids.prix_actuel.text = prix_initial
                     
                     from kivymd.uix.dialog import MDDialog
                     
                     self.fermer_ecran()
                     self.dismiss_popup()
                     
-                    self.popup.current = 'modif_prix'
-                    acceuil = MDDialog(
+                    self.popup.current = 'confirm_prix'
+                    confirmation_dialog = MDDialog(
                         md_bg_color='#56B5FB',
                         type='custom',
                         size_hint=(.5, .5),
@@ -1152,16 +1153,16 @@ class Screen(MDApp):
                     self.popup.width = '600dp'
                     
                     # ✅ Stocker le dialog
-                    self.dialog = acceuil
+                    self.dialog = confirmation_dialog
                     self.dialog.bind(on_dismiss=self.dismiss_popup)
                     self.dialog.open()
                 except Exception as e:
-                    print(f'❌ Erreur ouverture dialog prix: {e}')
+                    print(f'❌ Erreur ouverture dialog confirmation: {e}')
                     import traceback
                     traceback.print_exc()
-                    Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur ouverture dialog: {str(e)}'), 0)
+                    Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur ouverture confirmation: {str(e)}'), 0)
             
-            Clock.schedule_once(ouvrir_dialog, 0.2)
+            Clock.schedule_once(ouvrir_confirmation, 0.2)
             
         except Exception as e:
             print(f'❌ Erreur screen_modifier_prix: {e}')
@@ -1170,8 +1171,51 @@ class Screen(MDApp):
             Clock.schedule_once(lambda dt: self.loading_spinner(self.popup, 'modif_prix', show=False), 0)
             Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur accès ligne: {str(e)}'), 0)
 
-        self.dialog.open()
-        self.popup.get_screen('modif_prix').ids.new_price.text = ''
+    def proceed_to_modify_price(self):
+        """Passe de la fenêtre de confirmation à la fenêtre de modification de prix"""
+        try:
+            # ✅ Récupérer les données depuis la fenêtre de confirmation
+            date_value = self.popup.get_screen('confirm_prix').ids.date_value.text
+            prix_initial = self.popup.get_screen('confirm_prix').ids.prix_actuel.text
+            
+            print(f"✅ Passage à la modification: {date_value} (Prix: {prix_initial})")
+            
+            # ✅ Ouvrir la fenêtre de modification
+            def ouvrir_modif(dt):
+                try:
+                    self.popup.get_screen('modif_prix').ids.prix_init.text = prix_initial
+                    self.popup.get_screen('modif_prix').ids.new_price.text = ''
+                    
+                    from kivymd.uix.dialog import MDDialog
+                    
+                    self.popup.current = 'modif_prix'
+                    modification_dialog = MDDialog(
+                        md_bg_color='#56B5FB',
+                        type='custom',
+                        size_hint=(.5, .5),
+                        content_cls=self.popup,
+                        auto_dismiss=False
+                    )
+                    
+                    self.popup.height = '300dp'
+                    self.popup.width = '600dp'
+                    
+                    # ✅ Stocker le dialog
+                    self.dialog = modification_dialog
+                    self.dialog.bind(on_dismiss=self.dismiss_popup)
+                    self.dialog.open()
+                except Exception as e:
+                    print(f'❌ Erreur passage modification: {e}')
+                    import traceback
+                    traceback.print_exc()
+                    Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur ouverture modification: {str(e)}'), 0)
+            
+            Clock.schedule_once(ouvrir_modif, 0.2)
+            
+        except Exception as e:
+            print(f'❌ Erreur proceed_to_modify_price: {e}')
+            import traceback
+            traceback.print_exc()
 
     def afficher_facture(self, titre ,ecran):
         from kivymd.uix.dialog import MDDialog

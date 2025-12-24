@@ -35,6 +35,7 @@ MDScreen:
     manager.add_widget(Builder.load_file(f'screen/client/ajout_info_client.kv'))
     manager.add_widget(Builder.load_file(f'screen/client/save_info_client.kv'))
     manager.add_widget(Builder.load_file(f'screen/contrat/ajout_planning_contrat.kv'))
+    manager.add_widget(Builder.load_file(f'screen/contrat/confirm_prix.kv'))
     manager.add_widget(Builder.load_file(f'screen/contrat/modif_prix.kv'))
     manager.add_widget(Builder.load_file(f'screen/contrat/facture_contrat.kv'))
     manager.add_widget(Builder.load_file(f'screen/contrat/about_treatment.kv'))
