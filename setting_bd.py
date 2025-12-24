@@ -1190,18 +1190,22 @@ class DatabaseManager:
                     logger.error(f"❌ Erreur get_latest_contract_date: {e}", exc_info=True)
                     return None
 
-    async def get_current_client(self, client_id, date):
-        """Récupère les infos client avec tous les JOINs nécessaires par client_id."""
+    async def get_current_client(self, client_name, date):
+        """Récupère les infos client avec tous les JOINs nécessaires par nom du client et date de contrat."""
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cursor:
                 try:
-                    logger.debug(f"🔍 Récupération client_id: {client_id}, date: {date}")
-                    await cursor.execute("""SELECT c.client_id AS id,
+                    logger.debug(f"🔍 Récupération client: {client_name}, date: {date}")
+                    
+                    # ✅ Requête simplifiée: juste Client + Contrat + TypeTraitement (si existe)
+                    # Sans les Planning/PlanningDetails/Facture qui causent des NULL
+                    await cursor.execute("""SELECT 
+                                  c.client_id AS id,
                                   c.nom AS nom_client,
                                   c.prenom AS prenom_client,
                                   c.categorie AS categorie,
                                   co.date_contrat,
-                                  tt.typeTraitement AS type_traitement,
+                                  COALESCE(tt.typeTraitement, 'Non défini') AS type_traitement,
                                   co.duree AS duree_contrat,
                                   co.date_debut AS debut_contrat,
                                   co.date_fin AS fin_contrat,
@@ -1209,28 +1213,26 @@ class DatabaseManager:
                                   c.adresse,
                                   c.axe,
                                   c.telephone,
-                                  p.planning_id,
-                                  f.facture_id,
+                                  NULL AS planning_id,
+                                  NULL AS facture_id,
                                   c.nif,
                                   c.stat
                            FROM
                               Client c
                            JOIN
                               Contrat co ON c.client_id = co.client_id
-                           JOIN
+                           LEFT JOIN
                               Traitement t ON co.contrat_id = t.contrat_id
-                           JOIN
+                           LEFT JOIN
                               TypeTraitement tt ON t.id_type_traitement = tt.id_type_traitement
-                           JOIN
-                               Planning p ON t.traitement_id = p.traitement_id
-                           JOIN
-                               PlanningDetails pld ON p.planning_id = pld.planning_id
-                           JOIN
-                               Facture f ON pld.planning_detail_id = f.planning_detail_id
                            WHERE
-                              c.client_id = %s AND co.date_contrat = %s; """, (client_id, date))
+                              c.nom = %s AND co.date_contrat = %s
+                           LIMIT 1; """, (client_name, date))
                     resultat = await cursor.fetchone()
-                    logger.debug(f"✅ Client trouvé: {resultat[1] if resultat else 'Aucun'}")
+                    if resultat:
+                        logger.debug(f"✅ Client trouvé: {resultat[1]}")
+                    else:
+                        logger.warning(f"⚠️ Client '{client_name}' avec contrat du {date} introuvable")
                     return resultat
                 except Exception as e:
                     logger.error(f"❌ Erreur get_current_client: {e}", exc_info=True)
