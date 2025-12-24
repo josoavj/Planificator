@@ -118,9 +118,10 @@ class Screen(MDApp):
         self.facture = None
         self.account = None
         self._tables_initialized = False
+        self._popup_full_loaded = False
 
         self.popup = ScreenManager(size_hint=( None, None))
-        popup(self.popup)
+        popup(self.popup, init_only=True)  # ✅ Charger seulement les essentiels au démarrage
 
         #Pour les dropdown
         self.menu = None
@@ -1808,9 +1809,20 @@ class Screen(MDApp):
             self._screens_initialized = True
             asyncio.run_coroutine_threadsafe(self.populate_tables(), self.loop)
         
+        # ✅ ÉTAPE 2 - Optimisation: Charger les écrans popup additionnels après login
+        if not self._popup_full_loaded:
+            self._load_additional_popup_screens()
+        
         self.root.current = 'Sidebar'
         self.root.get_screen('Sidebar').ids['gestion_ecran'].current =  'Home'
         self.reset()
+
+    def _load_additional_popup_screens(self):
+        """Charger les écrans popup additionnels après le login"""
+        from gestion_ecran import popup
+        popup(self.popup, init_only=False)  # Charge TOUS les écrans
+        self._popup_full_loaded = True
+        print("✅ Écrans popup additionnels chargés après login")
 
     def switch_to_contrat(self):
         self.root.get_screen('Sidebar').ids['gestion_ecran'].current = 'contrat'
