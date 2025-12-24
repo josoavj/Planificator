@@ -2304,7 +2304,6 @@ class Screen(MDApp):
         for item in data:
             try:
                 if len(item) >= 8:  # Vérifier qu'on a assez d'éléments
-                    nom_client = item[0] if item[0] is not None else "N/A"
                     date = self.reverse_date(item[1]) if item[1] is not None else "N/A"
                     traitement = item[2] if item[2] is not None else "N/A"
                     redondance = item[7] if item[7] is not None else "N/A"
@@ -2315,44 +2314,43 @@ class Screen(MDApp):
                     else:
                         display_freq = f'{redondance} mois'
                     
-                    print(f"📋 Traitement {nom_client}: {date} - {traitement} ({display_freq})")
+                    print(f"📋 Traitement: {date} - {traitement} ({display_freq})")
                     row_data.append((date, traitement, display_freq))
                 else:
                     print(f"⚠️ Item insuffisant: {item}")
             except Exception as e:
                 print(f"❌ Erreur traitement: {e}")
 
-            try:
-                self.all_treat.row_data = row_data
+        # ✅ Configurez la table APRÈS la boucle
+        try:
+            self.all_treat.row_data = row_data
 
-                pagination = self.all_treat.pagination
+            pagination = self.all_treat.pagination
 
-                btn_prev = pagination.ids.button_back
-                btn_next = pagination.ids.button_forward
+            btn_prev = pagination.ids.button_back
+            btn_next = pagination.ids.button_forward
 
-                def on_press_page(direction, instance=None):
-                    print(f"📄 Pagination traitement: {direction} | page avant: {self.page}")
-                    max_page = (len(row_data) - 1) // 4 + 1
-                    if direction == 'moins' and self.page > 1:
-                        self.page -= 1
-                    elif direction == 'plus' and self.page < max_page:
-                        self.page += 1
-                    print(f"   page après: {self.page}")
+            self.page = 1
 
-                btn_prev.bind(on_press=partial(on_press_page, 'moins'))
-                btn_next.bind(on_press=partial(on_press_page, 'plus'))
+            def on_press_page(direction, instance=None):
+                print(f"📄 Pagination traitement: {direction} | page avant: {self.page}")
+                max_page = (len(row_data) - 1) // 4 + 1
+                if direction == 'moins' and self.page > 1:
+                    self.page -= 1
+                elif direction == 'plus' and self.page < max_page:
+                    self.page += 1
+                print(f"   page après: {self.page}")
 
-                self.all_treat.bind(on_row_press=self.row_pressed_contrat)
+            btn_prev.bind(on_press=partial(on_press_page, 'moins'))
+            btn_next.bind(on_press=partial(on_press_page, 'plus'))
 
-                # ✅ Afficher avec délai
-                def set_and_display():
-                    self.all_treat.row_data = row_data
-                    self._display_table_with_delay(place, self.all_treat, delay=0.4)
-                
-                Clock.schedule_once(lambda dt: set_and_display(), 0)
+            self.all_treat.bind(on_row_press=self.row_pressed_contrat)
 
-            except Exception as e:
-                print(f'Error creating traitement table: {e}')
+            # ✅ Afficher avec délai
+            self._display_table_with_delay(place, self.all_treat, delay=0.4)
+
+        except Exception as e:
+            print(f'Error creating traitement table: {e}')
 
 
     def row_pressed_contrat(self, table, row):
@@ -2679,26 +2677,24 @@ class Screen(MDApp):
                 ]
             )
 
-            def _():
-                self.liste_select_planning.row_data = row_data
-
             pagination = self.liste_select_planning.pagination
             btn_prev = pagination.ids.button_back
             btn_next = pagination.ids.button_forward
 
-            # ✅ Initialiser le paginateur pour la sélection planning
-            self.paginator_select_planning.set_total_rows(len(row_data))
-            self.paginator_select_planning.reset()
+            # ✅ Simple pagination locale (pas de paginator global)
+            self.page_select_planning = 1
 
-            def on_press_page( direction, instance=None):
-                print(f"📄 Select Planning: {direction} | {self.paginator_select_planning.debug_info()}")
-                if direction == 'moins':
-                    self.paginator_select_planning.prev_page()
-                elif direction == 'plus':
-                    self.paginator_select_planning.next_page()
+            def on_press_page(direction, instance=None):
+                print(f"📄 Select Planning: {direction} | page avant: {self.page_select_planning}")
+                max_page = (len(row_data) - 1) // 5 + 1
+                if direction == 'moins' and self.page_select_planning > 1:
+                    self.page_select_planning -= 1
+                elif direction == 'plus' and self.page_select_planning < max_page:
+                    self.page_select_planning += 1
+                print(f"   page après: {self.page_select_planning}")
 
-            btn_prev.bind(on_press=partial(on_press_page,  'moins'))
-            btn_next.bind(on_press=partial(on_press_page,  'plus'))
+            btn_prev.bind(on_press=partial(on_press_page, 'moins'))
+            btn_next.bind(on_press=partial(on_press_page, 'plus'))
 
             self.liste_select_planning.bind(
                 on_row_press=lambda instance, row: self.row_pressed_tableau_planning(traitement, instance, row))
@@ -2983,6 +2979,9 @@ class Screen(MDApp):
         btn_prev.bind(on_press=partial(on_press_page, 'moins'))
         btn_next.bind(on_press=partial(on_press_page, 'plus'))
 
+        # ✅ CORRECTION: Assigner les données au tableau AVANT l'affichage
+        self.historique.row_data = row_data
+        
         # ✅ Afficher avec délai
         self.historique.bind(on_row_press=partial(self.row_pressed_histo, planning_id=planning_id))
         self._display_table_with_delay(place, self.historique, delay=0.4)
