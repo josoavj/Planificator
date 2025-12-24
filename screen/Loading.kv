@@ -21,13 +21,6 @@ MDScreen:
 
         MDSpinner:
             size_hint: None, None
-            size: dp(100), dp(100)
+            size: dp(50), dp(50)
             pos_hint: {'center_x': .5, 'center_y': .25}
             active: True
-            canvas.before:
-                PushMatrix
-                Rotate:
-                    angle: self.angle
-                    origin: self.center_x, self.center_y
-            canvas.after:
-                PopMatrix
