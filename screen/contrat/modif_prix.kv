@@ -1,77 +1,100 @@
 MDScreen:
     name: 'modif_prix'
-    pos_hint: {'center_x': .5, 'center_y': .5}
 
-    MDFloatLayout:
-        pos_hint: {'center_x': .5, 'center_y': .5}
+    MDBoxLayout:
+        orientation: 'vertical'
+        padding: '12dp'
+        spacing: '12dp'
 
         MDLabel:
             id: titre
             text: 'Changement de prix'
-            font_size: 18
+            font_size: '16sp'
             font_name: 'poppins'
             halign: 'center'
-            pos_hint: {'center_x':.5, 'center_y': .95}
+            bold: True
+            size_hint_y: None
+            height: '35dp'
 
-        MDLabel:
-            text: 'Prix initiale'
-            font_name: "poppins"
-            font_size: 15
-            pos_hint: {"center_x": .58,'center_y':.75}
+        MDBoxLayout:
+            orientation: 'vertical'
+            spacing: '10dp'
+            size_hint_y: None
+            height: '140dp'
 
-        MDTextField:
-            id: prix_init
-            text_color_normal: 'black'
-            mode: 'fill'
-            text_color_focus: 'black'
-            font_name:"poppins"
-            pos_hint:{"center_x":.25,"center_y":.6}
-            line_color_focus: '#56B5FB'
-            fill_color_normal: 'white'
-            line_color_normal: 'white'
-            size_hint: .35,None
-            radius:[10]
-            readonly: True
+            MDBoxLayout:
+                orientation: 'vertical'
+                spacing: '5dp'
+                size_hint_y: None
+                height: '65dp'
 
-        MDLabel:
-            id: label_decalage
-            text: "Nouveau prix"
-            font_name: "poppins"
-            font_size: 15
-            pos_hint: {"center_x": 1.05,'center_y':.75}
+                MDLabel:
+                    text: 'Prix initial'
+                    font_name: 'poppins'
+                    font_size: '13sp'
+                    size_hint_y: None
+                    height: '18dp'
 
-        MDTextField:
-            id: new_price
-            text_color_normal: 'black'
-            mode: 'fill'
-            text_color_focus: 'black'
-            font_name:"poppins"
-            pos_hint:{"center_x":.72,"center_y":.6}
-            line_color_focus: '#56B5FB'
-            fill_color_normal: 'white'
-            line_color_normal: 'white'
-            size_hint: .35,None
-            radius:[10]
+                MDTextField:
+                    id: prix_init
+                    text_color_normal: (0, 0, 0, 1)
+                    mode: 'fill'
+                    text_color_focus: (0, 0, 0, 1)
+                    font_name: 'poppins'
+                    font_size: '12sp'
+                    line_color_focus: (0.33, 0.71, 0.98, 1)
+                    fill_color_normal: (1, 1, 1, 1)
+                    line_color_normal: (0.9, 0.9, 0.9, 1)
+                    readonly: True
+                    size_hint_y: None
+                    height: '40dp'
 
-        MDRectangleFlatButton:
-            text: 'Annuler'
-            size_hint: .35, None
-            font_name: 'poppins'
-            md_bg_color: '#FF3333'
-            line_color: '#FF3333'
-            text_color: 'black'
-            pos_hint: {'center_x':.29, 'center_y': .28}
-            on_press:
-                app.dismiss_popup()
-                app.fermer_ecran()
+            MDBoxLayout:
+                orientation: 'vertical'
+                spacing: '5dp'
+                size_hint_y: None
+                height: '65dp'
 
-        MDRectangleFlatButton:
-            text: "Enregister"
-            size_hint: .35, None
-            font_name: 'poppins'
-            md_bg_color: '#B3F844'
-            line_color: '#B3F844'
-            text_color: 'black'
-            pos_hint: {'center_x':.7, 'center_y': .28}
-            on_release:
-                app.changer_prix()
+                MDLabel:
+                    text: 'Nouveau prix'
+                    font_name: 'poppins'
+                    font_size: '13sp'
+                    size_hint_y: None
+                    height: '18dp'
+
+                MDTextField:
+                    id: new_price
+                    text_color_normal: (0, 0, 0, 1)
+                    mode: 'fill'
+                    text_color_focus: (0, 0, 0, 1)
+                    font_name: 'poppins'
+                    font_size: '12sp'
+                    line_color_focus: (0.33, 0.71, 0.98, 1)
+                    fill_color_normal: (1, 1, 1, 1)
+                    line_color_normal: (0.9, 0.9, 0.9, 1)
+                    size_hint_y: None
+                    height: '40dp'
+
+        MDBoxLayout:
+            orientation: 'horizontal'
+            spacing: '12dp'
+            size_hint_y: None
+            height: '45dp'
+
+            MDRaisedButton:
+                text: 'Annuler'
+                font_name: 'poppins'
+                md_bg_color: (1, 0.2, 0.2, 1)
+                text_color: (1, 1, 1, 1)
+                size_hint_x: 0.5
+                on_press:
+                    app.cancel_modify_price()
+
+            MDRaisedButton:
+                text: 'Enregistrer'
+                font_name: 'poppins'
+                md_bg_color: (0.7, 0.98, 0.27, 1)
+                text_color: (0, 0, 0, 1)
+                size_hint_x: 0.5
+                on_release:
+                    app.changer_prix()
