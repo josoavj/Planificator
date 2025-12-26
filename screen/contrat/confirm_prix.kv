@@ -1,72 +1,146 @@
-MDScreen:
-    name: 'confirm_prix'
-    pos_hint: {'center_x': .5, 'center_y': .5}
+MDBoxLayout:
+            orientation: 'horizontal'
+            spacing: '10dp'
+            size_hint_y: None
+            height: '40dp'
+            padding: '20dp, 0'
 
-    MDFloatLayout:
-        pos_hint: {'center_x': .5, 'center_y': .5}
+            MDRaisedButton:
+                text: 'Annuler'
+                font_name: 'poppins'
+                font_size: '12sp'
+                md_bg_color: (1, 0.2, 0.2, 1)
+                text_color: (1, 1, 1, 1)
+                size_hint_x: 0.4
+                on_press: app.cancel_modify_price()
+
+            MDRaisedButton:
+                text: 'Continuer'
+                font_name: 'poppins'
+                font_size: '12sp'
+                md_bg_color: (0.33, 0.71, 0.98, 1)
+                text_color: (1, 1, 1, 1)
+                size_hint_x: 0.4
+                on_press: app.proceed_to_modify_price()MDScreen:
+    name: 'confirm_prix'
+
+    MDBoxLayout:
+        orientation: 'vertical'
+        padding: '20dp'
+        spacing: '15dp'
+        size_hint: 1, 1
 
         MDLabel:
-            id: titre
-            text: 'Confirmation modification prix'
-            font_size: 18
+            text: 'Mise a jour du montant de traitement'
+            font_size: '16sp'
             font_name: 'poppins'
             halign: 'center'
-            pos_hint: {'center_x':.5, 'center_y': .95}
+            bold: True
+            size_hint_y: None
+            height: '40dp'
 
-        MDLabel:
-            text: 'Date du traitement'
-            font_name: "poppins"
-            font_size: 15
-            pos_hint: {"center_x": .5,'center_y':.75}
+        MDBoxLayout:
+            orientation: 'vertical'
+            spacing: '15dp'
+            size_hint_y: None
+            height: '280dp'
 
-        MDTextField:
-            id: date_value
-            text_color_normal: 'black'
-            mode: 'fill'
-            text_color_focus: 'black'
-            font_name:"poppins"
-            pos_hint:{"center_x":.5,"center_y":.6}
-            line_color_focus: '#56B5FB'
-            fill_color_normal: 'white'
-            line_color_normal: 'white'
-            size_hint: .6,None
-            radius:[10]
-            readonly: True
+            MDBoxLayout:
+                orientation: 'horizontal'
+                spacing: '10dp'
+                size_hint_y: None
+                height: '35dp'
 
-        MDLabel:
-            text: 'Prix actuel'
-            font_name: "poppins"
-            font_size: 15
-            pos_hint: {"center_x": .5,'center_y':.45}
+                MDLabel:
+                    text: 'Client :'
+                    font_size: '13sp'
+                    font_name: 'poppins'
+                    bold: True
+                    size_hint_x: 0.3
 
-        MDTextField:
-            id: prix_actuel
-            text_color_normal: 'black'
-            mode: 'fill'
-            text_color_focus: 'black'
-            font_name:"poppins"
-            pos_hint:{"center_x":.5,"center_y":.3}
-            line_color_focus: '#56B5FB'
-            fill_color_normal: 'white'
-            line_color_normal: 'white'
-            size_hint: .6,None
-            radius:[10]
-            readonly: True
+                MDLabel:
+                    id: client_nom
+                    text: ''
+                    font_size: '15sp'
+                    font_name: 'poppins'
+                    size_hint_x: 0.7
 
-        MDRectangleFlatButton:
-            text: 'Annuler'
-            size_hint: .25, None
-            font_name: 'poppins'
-            md_bg_color: '#FF3333'
-            pos_hint: {'center_x': .3, 'center_y': .08}
-            on_press:
-                app.dismiss_popup()
-                app.fermer_ecran()
+            MDBoxLayout:
+                orientation: 'horizontal'
+                spacing: '10dp'
+                size_hint_y: None
+                height: '35dp'
 
-        MDRectangleFlatButton:
-            text: 'Continuer'
-            size_hint: .25, None
-            font_name: 'poppins'
-            md_bg_color: '#56B5FB'
-            pos_hint: {'center_x': .7, 'center_y': .08}
-            on_press: app.proceed_to_modify_price()
+                MDLabel:
+                    text: 'Type de traitement :'
+                    font_size: '13sp'
+                    font_name: 'poppins'
+                    bold: True
+                    size_hint_x: 0.3
+
+                MDLabel:
+                    id: type_traitement
+                    text: ''
+                    font_size: '15sp'
+                    font_name: 'poppins'
+                    size_hint_x: 0.7
+
+            MDBoxLayout:
+                orientation: 'horizontal'
+                spacing: '10dp'
+                size_hint_y: None
+                height: '35dp'
+
+                MDLabel:
+                    text: 'Date :'
+                    font_size: '13sp'
+                    font_name: 'poppins'
+                    bold: True
+                    size_hint_x: 0.3
+
+                MDLabel:
+                    id: date_value
+                    text: ''
+                    font_size: '15sp'
+                    font_name: 'poppins'
+                    size_hint_x: 0.7
+
+            MDBoxLayout:
+                orientation: 'horizontal'
+                spacing: '10dp'
+                size_hint_y: None
+                height: '35dp'
+
+                MDLabel:
+                    text: 'Montant :'
+                    font_size: '13sp'
+                    font_name: 'poppins'
+                    bold: True
+                    size_hint_x: 0.3
+
+                MDLabel:
+                    id: prix_actuel
+                    text: ''
+                    font_size: '15sp'
+                    font_name: 'poppins'
+                    size_hint_x: 0.7
+
+            MDBoxLayout:
+                orientation: 'horizontal'
+                spacing: '10dp'
+                size_hint_y: None
+                height: '35dp'
+
+                MDLabel:
+                    text: 'État :'
+                    font_size: '13sp'
+                    font_name: 'poppins'
+                    bold: True
+                    size_hint_x: 0.3
+
+                MDLabel:
+                    id: etat_facture
+                    text: ''
+                    font_size: '15sp'
+                    font_name: 'poppins'
+                    size_hint_x: 0.7
