@@ -1170,25 +1170,33 @@ class Screen(MDApp):
             # ✅ Stocker les données avant ouverture du dialog
             self.date = self.reverse_date(row_value[0])
             prix_initial = str(row_value[1])
+            etat = row_value[2] if len(row_value) > 2 else 'N/A'
             
-            logger.info(f"✅ Modification prix pour: {row_value[0]} (Prix: {prix_initial})")
+            # ✅ Récupérer les infos client et traitement
+            client_nom = f"{self.current_client[1]} {self.current_client[2]}" if self.current_client else "N/A"
+            traitement = self.current_client[5] if self.current_client else "N/A"
+            
+            logger.info(f"✅ Modification prix pour: {row_value[0]} (Prix: {prix_initial}) - {client_nom} - {traitement}")
             
             # ✅ Remplir les champs de confirmation AVANT d'ouvrir
             def remplir_et_ouvrir(dt):
                 try:
                     self.popup.get_screen('confirm_prix').ids.date_value.text = self.date
                     self.popup.get_screen('confirm_prix').ids.prix_actuel.text = prix_initial
+                    self.popup.get_screen('confirm_prix').ids.client_nom.text = client_nom
+                    self.popup.get_screen('confirm_prix').ids.type_traitement.text = traitement
+                    self.popup.get_screen('confirm_prix').ids.etat_facture.text = etat
                     # ✅ Utiliser le pattern fenetre_client pour ouvrir correctement le dialog
-                    self.fenetre_client('Modification du prix', 'confirm_prix')
-                except Exception as e:
-                    logger.error(f'❌ Erreur remplissage confirmation: {e}', exc_info=True)
-                    Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur: {str(e)}'), 0)
+                    self.fenetre_client('', 'confirm_prix')
+                except Exception as err:
+                    logger.error(f'❌ Erreur remplissage confirmation: {err}', exc_info=True)
+                    Clock.schedule_once(lambda dt, e=err: self.show_dialog('Erreur', f'Erreur: {str(e)}'), 0)
             
             Clock.schedule_once(remplir_et_ouvrir, 0.1)
             
         except Exception as e:
             logger.error(f'❌ Erreur screen_modifier_prix: {e}', exc_info=True)
-            Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur accès ligne: {str(e)}'), 0)
+            Clock.schedule_once(lambda dt, e=e: self.show_dialog('Erreur', f'Erreur accès ligne: {str(e)}'), 0)
 
     def proceed_to_modify_price(self):
         """Passe de la fenêtre de confirmation à la fenêtre de modification de prix"""
@@ -1207,15 +1215,36 @@ class Screen(MDApp):
                     # ✅ Juste changer le screen - le dialog reste ouvert
                     self.popup.current = 'modif_prix'
                     logger.info(f"✅ Écran passé à modif_prix")
-                except Exception as e:
-                    logger.error(f'❌ Erreur changement screen: {e}', exc_info=True)
-                    Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur: {str(e)}'), 0)
+                except Exception as err:
+                    logger.error(f'❌ Erreur changement screen: {err}', exc_info=True)
+                    Clock.schedule_once(lambda dt, e=err: self.show_dialog('Erreur', f'Erreur: {str(e)}'), 0)
             
             Clock.schedule_once(modifier_ecran, 0.1)
             
         except Exception as e:
             logger.error(f'❌ Erreur proceed_to_modify_price: {e}', exc_info=True)
             Clock.schedule_once(lambda dt: self.show_dialog('Erreur', f'Erreur: {str(e)}'), 0)
+
+    def cancel_modify_price(self):
+        """Annule la modification de prix et retourne à l'affichage des factures"""
+        try:
+            # ✅ Fermer le dialog de confirmation
+            self.dismiss_popup()
+            
+            # ✅ Réouvrir l'affichage des factures
+            def reopen_facture(dt):
+                try:
+                    if self.current_client:
+                        self.afficher_facture('Factures', 'facture')
+                    else:
+                        logger.warning('⚠️ current_client est None, impossible de réouvrir factures')
+                except Exception as err:
+                    logger.error(f'❌ Erreur réouverture factures: {err}', exc_info=True)
+            
+            Clock.schedule_once(reopen_facture, 0.1)
+            
+        except Exception as e:
+            logger.error(f'❌ Erreur cancel_modify_price: {e}', exc_info=True)
 
     def afficher_facture(self, titre ,ecran):
         from kivymd.uix.dialog import MDDialog
@@ -1355,23 +1384,46 @@ class Screen(MDApp):
     def fenetre_client(self, titre, ecran):
         from kivymd.uix.dialog import MDDialog
 
+        # ✅ Retirer le popup du parent existant avant d'ouvrir un nouveau dialog
+        if self.popup.parent:
+            self.popup.parent.remove_widget(self.popup)
+
         self.popup.current = 'vide'
         self.popup.current = ecran
+        
+        # ✅ Tailles réduites pour prix
+        size_hints = {
+            'option_client': (.8, .65),
+            'confirm_prix': (.6, .5),
+            'modif_prix': (.6, .5),
+        }
+        heights = {
+            'option_client': '390dp',
+            'confirm_prix': '380dp',
+            'modif_prix': '300dp',
+        }
+        widths = {
+            'confirm_prix': '900dp',
+            'modif_prix': '850dp',
+        }
+        
+        size_hint = size_hints.get(ecran, (.8, .85))
+        height = heights.get(ecran, '550dp')
+        width = widths.get(ecran, '1000dp')
+        
         client = MDDialog(
             md_bg_color='#56B5FB',
             title=titre,
             type='custom',
-            size_hint=(.8, .65) if ecran == 'option_client' else (.8, .85),
+            size_hint=size_hint,
             content_cls=self.popup,
             auto_dismiss=False
         )
-        self.popup.height = '390dp' if ecran == 'option_client' else '550dp'
-        self.popup.width = '1000dp'
+        self.popup.height = height
+        self.popup.width = width
 
         self.dialog = client
         self.dialog.bind(on_dismiss=self.dismiss_popup)
-
-        self.dialog.open()
 
         self.dialog.open()
 
